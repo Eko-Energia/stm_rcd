@@ -11,105 +11,57 @@
 #include "type2.h"
 
 /*
- * GENERAL
- */
-Type2_StateTypeDef Type2_state = Type2_DISCONNECTED;
-
-/*
  * Private variables
  */
-static float Type2_maxCurrent = 0;
-
-void Type2_Process(float PP_voltage, float CP_duty)
-{
-	if(Type2_state != Type2_DISCONNECTED && CP_duty < 3)
-	{
-		Type2_state = Type2_DISCONNECTED;
-		return;
-	}
-
-	switch(Type2_state)
-	{
-	case Type2_DISCONNECTED:
-		// tutaj można sprawdzać, czy jest 9v
-		if (CP_duty >= 3)
-		{
-			Type2_state = Type2_IDLE;
-		}
-		break;
-	// connected, ready to charge
-	case Type2_IDLE:
-		UpdateMaxCurrent(PP_voltage, CP_duty);
-
-		if(Type2_maxCurrent > 0)
-		{
-			Type2_state = Type2_CHARGING;
-		}
-		break;
-	case Type2_CHARGING:
-		UpdateMaxCurrent(PP_voltage, CP_duty);
-
-		if(Type2_maxCurrent == 0)
-		{
-			Type2_IDLE;
-		}
-		break;
-	default:
-		// ErrorHandler("Type2 state unknown");
-		return;
-		break;
-	}
-}
-
-static void UpdateMaxCurrent(float PP_voltage, float CP_duty)
-{
-	CP_maxCurrent = CP_DutyToCurrent(CP_duty);
-	PP_maxCurrent = PP_GetMaxCurrent(PP_voltage);
-
-	Type2_maxCurrent = CP_maxCurrent > PP_maxCurrent ?
-			PP_maxCurrent : CP_maxCurrent;
-}
 
 /*
- * @brief  raw value from adc
- * @params hadc ADC instance
- * @params ADC_Channel pin identification
- * @retval raw value of ADC_Channel
+ * Private functions prototypes
  */
-uint32_t Read_ADC(ADC_HandleTypeDef* hadc, uint32_t ADC_Channel)
+static float CP_GetMaxCurrent(float PWM_Duty);
+static uint8_t PP_GetMaxCurrent(float voltage);
+
+// hardcoded so it doesn't need to be calculated each time
+#define SQRT_3 1.73205080757
+
+float Type2_MaxChargerCurrent(float PP_voltage, float CP_duty)
 {
-//	ADC_ChannelConfTypeDef sConfig = {0};
-//	sConfig.Channel = ADC_Channel;
-//	sConfig.Rank = 1;
-//	sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
-//
-//	HAL_ADC_ConfigChannel(hadc, &sConfig);
-	HAL_ADC_Start(hadc);
-	HAL_ADC_PollForConversion(hadc, HAL_MAX_DELAY);
+	const float CP_maxCurrent = CP_GetMaxCurrent(CP_duty);
+	const float PP_maxCurrent = PP_GetMaxCurrent(PP_voltage);
 
-	uint32_t value = HAL_ADC_GetValue(hadc);
+	const float maxCurrent = CP_maxCurrent > PP_maxCurrent ?
+			PP_maxCurrent : CP_maxCurrent;
 
-	HAL_ADC_Stop(hadc);
+	// calculate maxCurrent @ 87V
+	// hardcoded sqrt(3) bo na chuj ma się ciągle liczyć
+	float maxChargerCurrent = (float) MAX_TYPE2_CURRENT * maxCurrent / (float) MAX_TYPE2_VOLTAGE * SQRT_3;
 
-	return value;
+	// divided for 3 chargers
+	maxChargerCurrent = maxChargerCurrent / 3.0;
+	maxChargerCurrent = maxChargerCurrent > MAX_CHARGER_CURRENT ?
+			MAX_CHARGER_CURRENT : maxChargerCurrent;
+
+	return maxChargerCurrent;
 }
 
 /*
  * PP connector
  */
+struct PP_CurrentRange{
+	const float minVoltage;
+	const float maxVoltage;
+	const uint16_t maxCableCurrent;
+};
 
 /*
  * Contains voltage ranges that represent different cable width
  * https://www.smart-emotion.de/wiki/entry/325-pp/?synonym=443
  */
-static PP_CurrentRange currentRange[] = {
+static const struct PP_CurrentRange currentRange[] = {
 	{0.157f, 0.3f,   63},
 	{0.3f,   0.595f, 32},
 	{0.595f, 1.32f,  20},
-	{1.32f,  2.0f,   13},
+	{1.32f,  2.0f,   13}
 };
-
-
 
 /*
  * @brief  Return cable current capabilty of the connected charger
@@ -117,7 +69,8 @@ static PP_CurrentRange currentRange[] = {
  * @params voltage voltage on PP pin of the type 2 connector
  * @retval Max current in AMPS, -1 if not in range
  */
-uint8_t PP_GetMaxCurrent(float voltage){
+static uint8_t PP_GetMaxCurrent(float voltage)
+{
 	if (voltage < currentRange[0].minVoltage)
 	{
 		return 0;
@@ -134,7 +87,7 @@ uint8_t PP_GetMaxCurrent(float voltage){
 		}
 	}
 
-	// charger connected, but not
+	// charger connected, voltage not in range
 	return -1;
 }
 
@@ -147,7 +100,7 @@ uint8_t PP_GetMaxCurrent(float voltage){
  * assigned from
  * https://www.smart-emotion.de/wiki/entry/321-typ-2-charging-protocol-using-the-cp-contact/?synonym=420#module30www
  */
-float CP_DutyToCurrent(float PWM_Duty)
+static float CP_GetMaxCurrent(float PWM_Duty)
 {
 	if(PWM_Duty < 8)
 	{
@@ -174,3 +127,9 @@ float CP_DutyToCurrent(float PWM_Duty)
 		return 0;
 	}
 }
+
+/*
+ * Utils
+ */
+
+

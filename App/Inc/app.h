@@ -6,7 +6,15 @@
 #ifndef __APP_H__
 #define __APP_H__
 
+/*
+ * GENERAL
+ */
 void app_main(void);
+
+/*
+ * CAN
+ */
+
 
 /*
  * PP
@@ -17,7 +25,7 @@ void app_main(void);
 /*
  * CP
  */
-#define CP_PWM_CHANNEL TIM_CHANNEL_4
+#define CP_PWM_CHANNEL TIM_CHANNEL_1
 
 
 /*

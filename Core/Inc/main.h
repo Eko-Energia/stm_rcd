@@ -75,8 +75,6 @@ void Error_Handler(void);
 #define L3_SENSOR_GPIO_Port GPIOA
 #define PP_Pin GPIO_PIN_0
 #define PP_GPIO_Port GPIOB
-#define CP_Pin GPIO_PIN_1
-#define CP_GPIO_Port GPIOB
 #define RCD_FAULT_Pin GPIO_PIN_3
 #define RCD_FAULT_GPIO_Port GPIOB
 #define RCD_ERROR_Pin GPIO_PIN_4

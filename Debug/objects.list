@@ -1,4 +1,6 @@
+"./App/EKO_DRIVERS/Src/adc_driver.o"
 "./App/EKO_DRIVERS/Src/can_driver.o"
+"./App/EKO_DRIVERS/Src/pwm_driver.o"
 "./App/Src/app.o"
 "./App/Src/type2.o"
 "./Core/Src/adc.o"
