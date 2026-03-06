@@ -275,11 +275,12 @@ typedef struct{
 	#include "stm32f3xx.h"			// Including lib, which contains READ_REG and READ_BIT functions
 
 	#define  ADC_CCR_OFFSET 0x300	// CCR reg address offset from base ADC1 address
-
+	#define  ADC1_2_COMMON 0x4001212300UL
+	#define	ADC1_2_
 
 	/* Macros Function type for core of F3 family-------------------------------------- */
 	#define __ADC_IS_DMA_MULTIMODE(__HANDLE__) \
-											((READ_BIT(*(volatile uint32_t *)(ADC1_BASE + ADC_CCR_OFFSET), ADC_CCR_DUAL_Msk) != 0U) ? 1U : 0U)
+											((READ_BIT(*(volatile uint32_t *)(ADC1_2_COMMON-> + ADC_CCR_OFFSET), ADC_CCR_DUAL_Msk) == 0U) ? 0U : 1U)
 
 	#define __ADC_IS_CONV_STARTED(__HANDLE__)                                               												\
 											(((((__HANDLE__)->Instance->CR >> ADC_CR_ADSTART_Pos) & 0x1U)))

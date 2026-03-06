@@ -1,6 +1,7 @@
 #MicroXplorer Configuration settings - do not modify
 ADC1.Channel-0\#ChannelRegularConversion=ADC_CHANNEL_11
-ADC1.IPParameters=SubFamily,Rank-0\#ChannelRegularConversion,master,Channel-0\#ChannelRegularConversion,SamplingTime-0\#ChannelRegularConversion,SamplingTimeOPAMP-0\#ChannelRegularConversion,OffsetNumber-0\#ChannelRegularConversion,Offset-0\#ChannelRegularConversion,NbrOfConversionFlag
+ADC1.ContinuousConvMode=ENABLE
+ADC1.IPParameters=SubFamily,Rank-0\#ChannelRegularConversion,master,Channel-0\#ChannelRegularConversion,SamplingTime-0\#ChannelRegularConversion,SamplingTimeOPAMP-0\#ChannelRegularConversion,OffsetNumber-0\#ChannelRegularConversion,Offset-0\#ChannelRegularConversion,NbrOfConversionFlag,ContinuousConvMode
 ADC1.NbrOfConversionFlag=1
 ADC1.Offset-0\#ChannelRegularConversion=0
 ADC1.OffsetNumber-0\#ChannelRegularConversion=ADC_OFFSET_NONE

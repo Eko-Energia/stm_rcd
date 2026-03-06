@@ -76,9 +76,6 @@ HAL_StatusTypeDef ADC_Init(ADC_HandleTypeDef* hadc, ADC_BufferTypeDef* badc, ADC
 		return HAL_ERROR;
 	}
 
-	if(HAL_ADC_Start(hadc) != HAL_OK){
-			return HAL_ERROR;
-	}
 
 	// getting ranks config
 	if(ADC_ConfigGetRanksOfChannels(hadc, cadc, badc)!= HAL_OK){
@@ -191,7 +188,7 @@ HAL_StatusTypeDef ADC_ReadChannel(ADC_HandleTypeDef* hadc, ADC_ChannelsTypeDef* 
 	}
 
 	// checking status of DMA
-	if(__ADC_IS_DMA_ENABLED(hadc) == 0){  // DMA Disabled
+	if(__ADC_IS_DMA_ENABLED(hadc) == 0U){  // DMA Disabled
 
 		// iterating through all ranks to read value from correct channel's rank in ADC without DMA
 		for(int i  = 0 ; i <= rank ; ++i){
