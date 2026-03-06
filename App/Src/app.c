@@ -62,9 +62,6 @@ void app_main()
 	ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
 	PWM_initialize(&PWM_sig, 1000, 1, &htim1);
 
-	uint32_t x;
-	x = ADC_buffer.idma.BufferADC[0];
-
 	uint32_t startedCharging = 0;
 	float PP_voltage = 0;
 
@@ -76,6 +73,7 @@ void app_main()
 		switch(Type2_state)
 		{
 		case Type2_DISCONNECTED:
+
 			//TODO olac jezeli jedzie
 			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			if(PP_voltage > 0)

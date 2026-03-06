@@ -272,15 +272,13 @@ typedef struct{
 
 #elif defined(STM32F3_FAMILY)
 
-	#include "stm32f3xx.h"			// Including lib, which contains READ_REG and READ_BIT functions
+	#include "stm32f3xx.h"						// Including lib, which contains READ_REG and READ_BIT functions
 
-	#define  ADC_CCR_OFFSET 0x300	// CCR reg address offset from base ADC1 address
-	#define  ADC1_2_COMMON 0x4001212300UL
-	#define	ADC1_2_
+	#define  ADC_CCR_OFFSET 	0x300			// CCR reg address offset from base ADC1 address
 
 	/* Macros Function type for core of F3 family-------------------------------------- */
 	#define __ADC_IS_DMA_MULTIMODE(__HANDLE__) \
-											((READ_BIT(*(volatile uint32_t *)(ADC1_2_COMMON-> + ADC_CCR_OFFSET), ADC_CCR_DUAL_Msk) == 0U) ? 0U : 1U)
+											((ADC1_2_COMMON->CCR & ADC_CCR_DUAL) != 0U ? 1U : 0U)
 
 	#define __ADC_IS_CONV_STARTED(__HANDLE__)                                               												\
 											(((((__HANDLE__)->Instance->CR >> ADC_CR_ADSTART_Pos) & 0x1U)))
@@ -289,8 +287,8 @@ typedef struct{
 											((READ_BIT((__HANDLE__)->Instance->CFGR, ADC_CFGR_DMAEN)))
 
 	#define __ADC_RESOLUTION(__HANDLE__)                                                    												\
-											(((((__HANDLE__)->Instance->CFGR >> ADC_CFGR_RES_Pos) & 0x3) == 0x0) ? 4095U : 			    \
-											 ((((__HANDLE__)->Instance->CFGR >> ADC_CFGR_RES_Pos) & 0x3) == 0x1) ? 1023U : 			    \
+											(((((__HANDLE__)->Instance->CFGR >> ADC_CFGR_RES_Pos) & 0x3) == 0x0) ? 4095U : 			    	\
+											 ((((__HANDLE__)->Instance->CFGR >> ADC_CFGR_RES_Pos) & 0x3) == 0x1) ? 1023U : 			    	\
 											 ((((__HANDLE__)->Instance->CFGR >> ADC_CFGR_RES_Pos) & 0x3) == 0x2) ? 255U  : 63U )
 
 	#define __ADC_DMA_MODE(__HANDLE__)                                                      												\
