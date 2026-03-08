@@ -37,7 +37,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim->Instance == CP_TIM_INSTANCE)
 	{
-		PWM_update(&htim1, &PWM_sig, 1);
+		PWM_update(&htim1, &PWM_sig);
 	}
 }
 
@@ -68,6 +68,8 @@ void app_main()
 	CAN_init(&hcan);
 	ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
 	PWM_initialize(&PWM_sig, 1000, 1, &htim1);
+	HAL_TIM_IC_Start_IT(&htim1, CP_PWM_CHANNEL);
+	HAL_TIM_IC_Start(&htim1, CP_PWM_CHANNEL_COMBINED);
 
 	uint32_t startedCharging = 0;
 	float PP_voltage = 0;
@@ -90,7 +92,6 @@ void app_main()
 			break;
 		case Type2_IDLE:
 			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
-			PWM_update(&htim1, &PWM_sig, 1);
 			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
 
 			if(maxChargerCurrent > 0)
@@ -98,7 +99,8 @@ void app_main()
 				startCharging();
 				startedCharging = HAL_GetTick();
 			}
-			else if (PP_voltage > 2.0f)
+
+			if (PP_voltage > 2.0f)
 			{
 				Type2_state = Type2_DISCONNECTED;
 			}
