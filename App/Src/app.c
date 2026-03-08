@@ -33,6 +33,13 @@ static ADC_ChannelsTypeDef ADC_channels;
 * PWM
 */
 static struct PWM_signal PWM_sig;
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	if(htim->Instance == CP_TIM_INSTANCE)
+	{
+		PWM_update(&htim1, &PWM_sig, 1);
+	}
+}
 
 // used to
 typedef enum

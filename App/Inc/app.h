@@ -26,6 +26,7 @@ void app_main(void);
  * CP
  */
 #define CP_PWM_CHANNEL TIM_CHANNEL_1
+#define CP_TIM_INSTANCE TIM1
 
 
 /*
