@@ -71,7 +71,10 @@ void app_main()
 	HAL_TIM_IC_Start_IT(&htim1, CP_PWM_CHANNEL);
 	HAL_TIM_IC_Start(&htim1, CP_PWM_CHANNEL_COMBINED);
 
-	uint32_t startedCharging = 0;
+	// switch relays off
+	// TODO off for testing purposes RCD_FAULT is set to input (no clicking)
+	//HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_RESET);
+
 	float PP_voltage = 0;
 
 	while(1)
@@ -92,7 +95,8 @@ void app_main()
 			break;
 		case Type2_IDLE:
 			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
-			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
+			// TODO remove testing values for CP
+			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, 20 /*PWM_sig.PWM_width*/);
 
 			if(maxChargerCurrent > 0)
 			{
@@ -104,11 +108,10 @@ void app_main()
 			{
 				Type2_state = Type2_DISCONNECTED;
 			}
-			//TODO startcharging
 			break;
 		case Type2_CHARGING:
-			//TODO stop charging
-			if(maxChargerCurrent <= 0 || HAL_GetTick() - startedCharging > 1000)
+		// TODO remove testing conditions
+			if(maxChargerCurrent <= 0)
 			{
 				stopCharging();
 			}
@@ -127,7 +130,7 @@ static void startCharging()
 	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin, GPIO_PIN_SET);
 
 	struct CAN_scheduledMsg chargerComms;
-	chargerComms.header.DLC = 3;
+	chargerComms.header.DLC = 5;
 	chargerComms.header.IDE = CAN_ID_EXT;
 	chargerComms.header.RTR = CAN_RTR_DATA;
 	chargerComms.lastTick = 0;
@@ -195,9 +198,7 @@ static void chargerGetData(uint8_t *data, void *context)
 
 	uint16_t maxChargerCurrentInt = (uint16_t) maxCurrent;
 	uint16_t maxVoltageInt = (uint16_t) maxVoltage;
-	uint8_t control = 1;
 
-	// TODO test
 	// syntax error is probably an IDE bug
 	// charger frame requires big endian
 	maxVoltageInt = SWAP_ENDIANNESS(maxVoltageInt);
@@ -206,7 +207,9 @@ static void chargerGetData(uint8_t *data, void *context)
 	data[1] = GET_BYTE(maxVoltageInt, 1);
 	data[2] = GET_BYTE(maxChargerCurrentInt, 0);
 	data[3] = GET_BYTE(maxChargerCurrentInt, 1);
+
 	// charging is requested whenever this function is called;
+	uint8_t control = 1;
 	data[4] = SWAP_ENDIANNESS(control);
 }
 
