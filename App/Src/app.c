@@ -101,7 +101,6 @@ void app_main()
 			if(maxChargerCurrent > 0)
 			{
 				startCharging();
-				startedCharging = HAL_GetTick();
 			}
 
 			if (PP_voltage > 2.0f)
