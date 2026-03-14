@@ -62,10 +62,6 @@ void app_main()
 	ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
 	PWM_initialize(&PWM_sig, 1000, 1, &htim1);
 
-	uint32_t x;
-	x = ADC_buffer.idma.BufferADC[0];
-
-	uint32_t startedCharging = 0;
 	float PP_voltage = 0;
 
 	while(1)
@@ -91,7 +87,6 @@ void app_main()
 			if(maxChargerCurrent > 0)
 			{
 				startCharging();
-				startedCharging = HAL_GetTick();
 			}
 			else if (PP_voltage > 2.0f)
 			{
@@ -101,7 +96,7 @@ void app_main()
 			break;
 		case Type2_CHARGING:
 			//TODO stop charging
-			if(maxChargerCurrent <= 0 || HAL_GetTick() - startedCharging > 1000)
+			if(maxChargerCurrent <= 0)
 			{
 				stopCharging();
 			}
@@ -144,6 +139,9 @@ static void stopCharging()
 	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin, GPIO_PIN_RESET);
 
 	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER1COMMS, &CAN_buffer);
+	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER2COMMS, &CAN_buffer);
+	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER3COMMS, &CAN_buffer);
+
 	Type2_state = Type2_IDLE;
 }
 
