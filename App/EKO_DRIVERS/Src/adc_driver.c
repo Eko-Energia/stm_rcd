@@ -18,6 +18,8 @@
 
 #include "adc_driver.h"
 
+volatile int ADC_MULTIMODE__DMA_ENABLED = 0;
+
 // Private variables
 // Container of ADC ranks to return rank's register while number of rank is given
 static 			uint32_t ADC_RANKS_REGS[16] = {
@@ -70,14 +72,9 @@ HAL_StatusTypeDef ADC_Init(ADC_HandleTypeDef* hadc, ADC_BufferTypeDef* badc, ADC
 			#endif
 	#endif
 
-
 	// launching ADC
 	if(HAL_ADC_Start(hadc) != HAL_OK){
 		return HAL_ERROR;
-	}
-
-	if(HAL_ADC_Start(hadc) != HAL_OK){
-			return HAL_ERROR;
 	}
 
 	// getting ranks config
@@ -99,8 +96,12 @@ HAL_StatusTypeDef ADC_Init(ADC_HandleTypeDef* hadc, ADC_BufferTypeDef* badc, ADC
 			}
 	}else{
 
+
 			// checking if DMA is enabled
 			if(__ADC_IS_DMA_ENABLED(hadc) != 0){
+
+				// setting flag status, to provide correct information on case of calling macro with passing slave instance of ADC
+				ADC_MULTIMODE__DMA_ENABLED = 1;
 
 				// stopping ADC to reconfigure it for dual mode DMA
 				if(HAL_ADC_Stop(hadc) != HAL_OK){

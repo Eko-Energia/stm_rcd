@@ -1,1 +1,11 @@
-/Release/
+# Build artifacts
+Debug/
+Release/
+bin/
+obj/
+
+# User-specific settings (prevents local path conflicts)
+.settings/
+*.launch
+*.uvgui.* (for Keil)
+*.bak
