@@ -6,6 +6,8 @@
 #ifndef __APP_H__
 #define __APP_H__
 
+#include "main.h"
+
 /*
  * GENERAL
  */
@@ -25,7 +27,7 @@ void app_main(void);
 /*
  * CP
  */
-#define CP_PWM_CHANNEL TIM_CHANNEL_1
+#define CP_PWM_CHANNEL HAL_TIM_ACTIVE_CHANNEL_1
 
 
 /*

@@ -56,6 +56,14 @@ static void startCharging();
 static void stopCharging();
 static void chargerGetData(uint8_t *data, void *context);
 
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	if(htim->Channel == CP_PWM_CHANNEL)
+	{
+		PWM_update(htim, &PWM_sig, 1);
+	}
+}
+
 void app_main()
 {
 	CAN_init(&hcan);
@@ -74,27 +82,27 @@ void app_main()
 		case Type2_DISCONNECTED:
 			//TODO olac jezeli jedzie
 			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
-			if(PP_voltage > 0)
+			if(PP_voltage < PP_VOLTAGE_DISCONNECTED)
 			{
 				Type2_state = Type2_IDLE;
 			}
 			break;
 		case Type2_IDLE:
 			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
-			PWM_update(&htim1, &PWM_sig, 1);
 			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
 
 			if(maxChargerCurrent > 0)
 			{
 				startCharging();
 			}
-			else if (PP_voltage > 2.0f)
+			else if (PP_voltage > PP_VOLTAGE_DISCONNECTED)
 			{
 				Type2_state = Type2_DISCONNECTED;
 			}
 			//TODO startcharging
 			break;
 		case Type2_CHARGING:
+			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
 			//TODO stop charging
 			if(maxChargerCurrent <= 0)
 			{
@@ -115,7 +123,7 @@ static void startCharging()
 	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin, GPIO_PIN_SET);
 
 	struct CAN_scheduledMsg chargerComms;
-	chargerComms.header.DLC = 3;
+	chargerComms.header.DLC = 5;
 	chargerComms.header.IDE = CAN_ID_EXT;
 	chargerComms.header.RTR = CAN_RTR_DATA;
 	chargerComms.lastTick = 0;

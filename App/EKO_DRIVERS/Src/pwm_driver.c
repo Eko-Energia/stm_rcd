@@ -28,9 +28,13 @@ void PWM_initialize(struct PWM_signal* signal,int frequency, bool isChannel1, TI
 	signal->sConfigIC.ICFilter = 0;
 	if(isChannel1){
 		HAL_TIM_IC_ConfigChannel(htim, &signal->sConfigIC, TIM_CHANNEL_1);
+        HAL_TIM_IC_Start_IT(htim, TIM_CHANNEL_1);
+        HAL_TIM_IC_Start(htim, TIM_CHANNEL_2);
 	}
 	else{
 		HAL_TIM_IC_ConfigChannel(htim, &signal->sConfigIC, TIM_CHANNEL_2);
+        HAL_TIM_IC_Start_IT(htim, TIM_CHANNEL_2);
+        HAL_TIM_IC_Start(htim, TIM_CHANNEL_1);
 	}
 
 }
@@ -48,7 +52,7 @@ void PWM_update(TIM_HandleTypeDef *htim,struct PWM_signal *PWM, bool isChannel1)
 
 		if (PWM->icVal != 0)
 		{
-			PWM->PWM_width = (HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2) *100)/PWM->icVal;
+			PWM->PWM_width = (HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2) *100.0f)/(float)PWM->icVal;
 
 		}
 	}
@@ -58,7 +62,7 @@ void PWM_update(TIM_HandleTypeDef *htim,struct PWM_signal *PWM, bool isChannel1)
 
 		if (PWM->icVal != 0)
 		{
-			PWM->PWM_width = (HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1) *100)/PWM->icVal;
+			PWM->PWM_width = (HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1) *100.0f)/(float)PWM->icVal;
 
 		}
 	}
