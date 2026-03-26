@@ -47,7 +47,7 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, TYPE2_LED_RED_Pin|LED_RED_Pin|LED_GREEN_Pin|TYPE2_LED_GREEN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, RCD_FAULT_Pin|START_CHARGING_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : TYPE2_LED_RED_Pin LED_RED_Pin LED_GREEN_Pin TYPE2_LED_GREEN_Pin */
   GPIO_InitStruct.Pin = TYPE2_LED_RED_Pin|LED_RED_Pin|LED_GREEN_Pin|TYPE2_LED_GREEN_Pin;
@@ -62,8 +62,15 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : RCD_FAULT_Pin RCD_ERROR_Pin RCD_TEST_Pin */
-  GPIO_InitStruct.Pin = RCD_FAULT_Pin|RCD_ERROR_Pin|RCD_TEST_Pin;
+  /*Configure GPIO pin : RCD_FAULT_Pin */
+  GPIO_InitStruct.Pin = RCD_FAULT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(RCD_FAULT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : RCD_ERROR_Pin RCD_TEST_Pin */
+  GPIO_InitStruct.Pin = RCD_ERROR_Pin|RCD_TEST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);

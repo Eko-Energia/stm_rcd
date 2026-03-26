@@ -1,8 +1,15 @@
 # Build artifacts
+<<<<<<< HEAD
 /Debug/
 /Release/
 /bin/
 /obj/
+=======
+Debug/
+Release/
+bin/
+obj/
+>>>>>>> main
 
 # User-specific settings (prevents local path conflicts)
 .settings/

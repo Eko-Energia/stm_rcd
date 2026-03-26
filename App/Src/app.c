@@ -33,6 +33,13 @@ static ADC_ChannelsTypeDef ADC_channels;
 * PWM
 */
 static struct PWM_signal PWM_sig;
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	if(htim->Instance == CP_TIM_INSTANCE)
+	{
+		PWM_update(&htim1, &PWM_sig);
+	}
+}
 
 // used to
 typedef enum
@@ -72,6 +79,12 @@ void app_main()
 	CAN_init(&hcan);
 	ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
 	PWM_initialize(&PWM_sig, 1000, 1, &htim1);
+	HAL_TIM_IC_Start_IT(&htim1, CP_PWM_CHANNEL);
+	HAL_TIM_IC_Start(&htim1, CP_PWM_CHANNEL_COMBINED);
+
+	// switch relays off
+	// TODO off for testing purposes RCD_FAULT is set to input (no clicking)
+	//HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_RESET);
 
 	float PP_voltage = 0;
 
@@ -83,6 +96,7 @@ void app_main()
 		switch(Type2_state)
 		{
 		case Type2_DISCONNECTED:
+
 			//TODO olac jezeli jedzie
 			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			if(PP_voltage < PP_VOLTAGE_DISCONNECTED)
@@ -97,7 +111,8 @@ void app_main()
 				LED_RED_lastTick = HAL_GetTick();
 			}
 			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
-			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
+			// TODO remove testing values for CP
+			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, 20 /*PWM_sig.PWM_width*/);
 
 			if(maxChargerCurrent > 0)
 			{
@@ -107,7 +122,6 @@ void app_main()
 			{
 				Type2_state = Type2_DISCONNECTED;
 			}
-			//TODO startcharging
 			break;
 		case Type2_CHARGING:
 			if(LED_GREEN_lastTick < HAL_GetTick() - 400)
@@ -208,9 +222,7 @@ static void chargerGetData(uint8_t *data, void *context)
 
 	uint16_t maxChargerCurrentInt = (uint16_t) maxCurrent;
 	uint16_t maxVoltageInt = (uint16_t) maxVoltage;
-	uint8_t control = 1;
 
-	// TODO test
 	// syntax error is probably an IDE bug
 	// charger frame requires big endian
 	maxVoltageInt = SWAP_ENDIANNESS(maxVoltageInt);
@@ -219,7 +231,9 @@ static void chargerGetData(uint8_t *data, void *context)
 	data[1] = GET_BYTE(maxVoltageInt, 1);
 	data[2] = GET_BYTE(maxChargerCurrentInt, 0);
 	data[3] = GET_BYTE(maxChargerCurrentInt, 1);
+
 	// charging is requested whenever this function is called;
+	uint8_t control = 1;
 	data[4] = SWAP_ENDIANNESS(control);
 }
 
