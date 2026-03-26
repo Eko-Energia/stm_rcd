@@ -35,7 +35,7 @@ static ADC_ChannelsTypeDef ADC_channels;
 static struct PWM_signal PWM_sig;
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
-	if(htim->Instance == CP_TIM_INSTANCE)
+	if(htim->Channel == CP_PWM_CHANNEL)
 	{
 		PWM_update(&htim1, &PWM_sig);
 	}
@@ -66,21 +66,11 @@ static void startCharging();
 static void stopCharging();
 static void chargerGetData(uint8_t *data, void *context);
 
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
-{
-	if(htim->Channel == CP_PWM_CHANNEL)
-	{
-		PWM_update(htim, &PWM_sig, 1);
-	}
-}
-
 void app_main()
 {
 	CAN_init(&hcan);
 	ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
 	PWM_initialize(&PWM_sig, 1000, 1, &htim1);
-	HAL_TIM_IC_Start_IT(&htim1, CP_PWM_CHANNEL);
-	HAL_TIM_IC_Start(&htim1, CP_PWM_CHANNEL_COMBINED);
 
 	// switch relays off
 	// TODO off for testing purposes RCD_FAULT is set to input (no clicking)
