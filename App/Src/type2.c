@@ -88,7 +88,7 @@ static uint8_t PP_GetMaxCurrent(float voltage)
 	}
 
 	// charger connected, voltage not in range
-	return -1;
+	return 0;
 }
 
 

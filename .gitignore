@@ -1,8 +1,8 @@
 # Build artifacts
-Debug/
-Release/
-bin/
-obj/
+/Debug/
+/Release/
+/bin/
+/obj/
 
 # User-specific settings (prevents local path conflicts)
 .settings/

@@ -48,6 +48,9 @@ typedef enum
 
 static phaseStatus_e phaseStatus = PHASE_UNPOWERED;
 
+uint32_t LED_RED_lastTick = 0;
+uint32_t LED_GREEN_lastTick = 0;
+
 /*
  * Private function prototypes
  */
@@ -88,6 +91,11 @@ void app_main()
 			}
 			break;
 		case Type2_IDLE:
+			if(LED_RED_lastTick < HAL_GetTick() - 400)
+			{
+				HAL_GPIO_TogglePin(TYPE2_LED_RED_GPIO_Port, TYPE2_LED_RED_Pin);
+				LED_RED_lastTick = HAL_GetTick();
+			}
 			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
 
@@ -102,6 +110,12 @@ void app_main()
 			//TODO startcharging
 			break;
 		case Type2_CHARGING:
+			if(LED_GREEN_lastTick < HAL_GetTick() - 400)
+			{
+				HAL_GPIO_TogglePin(TYPE2_LED_GREEN_GPIO_Port, TYPE2_LED_GREEN_Pin);
+				LED_GREEN_lastTick = HAL_GetTick();
+			}
+			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
 			//TODO stop charging
 			if(maxChargerCurrent <= 0)

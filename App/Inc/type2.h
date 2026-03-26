@@ -21,12 +21,12 @@
  * @brief The maximum current on one charger on 87V
  * max max max = 37A (just for reference)
  */
-#define MAX_CHARGER_CURRENT 35
+#define MAX_CHARGER_CURRENT 90
 #define MAX_CHARGER_VOLTAGE 87
 #define MAX_TYPE2_CURRENT 16
 #define MAX_TYPE2_VOLTAGE 400
 #define MAX_PP_VOLTAGE 3.3f
-#define PP_VOLTAGE_DISCONNECTED 2.5f
+#define PP_VOLTAGE_DISCONNECTED 2.2f
 /*
  * TYPE 2
  */
