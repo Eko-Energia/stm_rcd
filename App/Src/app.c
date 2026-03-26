@@ -102,7 +102,7 @@ void app_main()
 			}
 			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			// TODO remove testing values for CP
-			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, 20 /*PWM_sig.PWM_width*/);
+			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
 
 			if(maxChargerCurrent > 0)
 			{
