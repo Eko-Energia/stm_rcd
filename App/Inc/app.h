@@ -33,6 +33,6 @@ void app_main(void);
 /*
  * RCD
  */
-#define RCD_PWM_CHANNEL TIM_CHANNEL_1
+#define RCD_PWM_CHANNEL HAL_TIM_ACTIVE_CHANNEL_1
 
 #endif /* __APP_H_ */
