@@ -37,12 +37,12 @@ extern "C" {
 #define				SQR_4					4
 
 #define 			ADC_MAX_CHANNELS       1										// maximum number of ADC's channels
-#define 			ADC_AVERAGED_MEASURES  5											// common number of measures from one channel to be averaged
+#define 			ADC_AVERAGED_MEASURES  10											// common number of measures from one channel to be averaged
 #define 			ADC_BUFF_SIZE 		   (ADC_AVERAGED_MEASURES * ADC_MAX_CHANNELS)	// ADC Buffers' Size, includes size of all channels and their number of averaged measures
 
 /* Variables--------------------------------------------------------------------------- */
 static volatile int ADC_CONVERTED_CHANNELS =  4;	// default value of converted which will be overwrite by program in runtime after auto-detect process
-
+extern volatile int ADC_MULTIMODE__DMA_ENABLED;
 
 
 /* Typedefs --------------------------------------------------------------------------- */
@@ -283,8 +283,10 @@ typedef struct{
 	#define __ADC_IS_CONV_STARTED(__HANDLE__)                                               												\
 											(((((__HANDLE__)->Instance->CR >> ADC_CR_ADSTART_Pos) & 0x1U)))
 
-	#define __ADC_IS_DMA_ENABLED(__HANDLE__)                                                												\
-											((READ_BIT((__HANDLE__)->Instance->CFGR, ADC_CFGR_DMAEN)))
+	#define __ADC_IS_DMA_ENABLED(__HANDLE__) \
+											(((__HANDLE__)->Instance != ADC1 && __ADC_IS_DMA_MULTIMODE(__HANDLE__) == 1U)?									\
+											ADC_MULTIMODE__DMA_ENABLED : ((READ_BIT((__HANDLE__)->Instance->CFGR, ADC_CFGR_DMAEN)) ||                 		\
+											(READ_BIT(((ADC_Common_TypeDef *)((uint32_t)(__HANDLE__)->Instance + ADC_CCR_OFFSET))->CCR, ADC_CCR_MDMA))))
 
 	#define __ADC_RESOLUTION(__HANDLE__)                                                    												\
 											(((((__HANDLE__)->Instance->CFGR >> ADC_CFGR_RES_Pos) & 0x3) == 0x0) ? 4095U : 			    	\

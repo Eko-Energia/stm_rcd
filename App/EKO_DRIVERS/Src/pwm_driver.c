@@ -38,31 +38,28 @@
  *        - false : PWM input configured on TIM Channel 2
  * @param htim Pointer to the timer handle used for input capture
  */
-void PWM_initialize(struct PWM_signal* signal,
-                    int frequency,
-                    bool isChannel1,
-                    TIM_HandleTypeDef *htim)
-{
-    signal->PWM_width = 0.0f;
-    signal->readFlag = false;
-    signal->frequency = frequency;
-    signal->icVal = 0;
-    signal->ch1 = isChannel1;
-    /* Configure input capture parameters */
-    signal->sConfigIC.ICPolarity  = TIM_INPUTCHANNELPOLARITY_RISING;
-    signal->sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
-    signal->sConfigIC.ICPrescaler = TIM_ICPSC_DIV8;
-    signal->sConfigIC.ICFilter    = 0;
-    if (isChannel1)
-    {
-        HAL_TIM_IC_ConfigChannel(htim, &signal->sConfigIC, TIM_CHANNEL_1);
-    }
-    else
-    {
-        HAL_TIM_IC_ConfigChannel(htim, &signal->sConfigIC, TIM_CHANNEL_2);
-    }
-}
+void PWM_initialize(struct PWM_signal* signal,int frequency, bool isChannel1, TIM_HandleTypeDef *htim ) {
+	signal->PWM_width = 0.f;
+	signal->readFlag = false;
+	signal->frequency = frequency;
+	signal->icVal = 0;
+	signal->ch1 = isChannel1;
+	signal->sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+	signal->sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+	signal->sConfigIC.ICPrescaler = TIM_ICPSC_DIV8;
+	signal->sConfigIC.ICFilter = 0;
+	if(isChannel1){
+		HAL_TIM_IC_ConfigChannel(htim, &signal->sConfigIC, TIM_CHANNEL_1);
+        HAL_TIM_IC_Start_IT(htim, TIM_CHANNEL_1);
+        HAL_TIM_IC_Start(htim, TIM_CHANNEL_2);
+	}
+	else{
+		HAL_TIM_IC_ConfigChannel(htim, &signal->sConfigIC, TIM_CHANNEL_2);
+        HAL_TIM_IC_Start_IT(htim, TIM_CHANNEL_2);
+        HAL_TIM_IC_Start(htim, TIM_CHANNEL_1);
+	}
 
+}
 /**
  * @brief Update PWM duty cycle measurement
  *

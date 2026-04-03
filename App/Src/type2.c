@@ -33,7 +33,7 @@ float Type2_MaxChargerCurrent(float PP_voltage, float CP_duty)
 
 	// calculate maxCurrent @ 87V
 	// hardcoded sqrt(3) bo na chuj ma się ciągle liczyć
-	float maxChargerCurrent = (float) MAX_TYPE2_CURRENT * maxCurrent / (float) MAX_TYPE2_VOLTAGE * SQRT_3;
+	float maxChargerCurrent = (float) MAX_TYPE2_VOLTAGE * maxCurrent * (float) SQRT_3 / (float) MAX_CHARGER_VOLTAGE;
 
 	// divided for 3 chargers
 	maxChargerCurrent = maxChargerCurrent / 3.0;
@@ -88,7 +88,7 @@ static uint8_t PP_GetMaxCurrent(float voltage)
 	}
 
 	// charger connected, voltage not in range
-	return -1;
+	return 0;
 }
 
 

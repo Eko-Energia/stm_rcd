@@ -4,7 +4,7 @@ Release/
 bin/
 obj/
 
-# User-specific settings (prevents local path conflicts)
+# User specific settings
 .settings/
 *.launch
 *.uvgui.* (for Keil)
