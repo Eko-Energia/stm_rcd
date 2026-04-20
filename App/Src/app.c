@@ -33,12 +33,12 @@ static ADC_ChannelsTypeDef ADC_channels;
 /*
 * PWM
 */
-static struct PWM_signal PWM_sig;
+static struct PWM_IC_signal PWM_sig;
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim->Channel == CP_PWM_CHANNEL)
 	{
-		PWM_update(&htim1, &PWM_sig);
+		PWM_IC_update(&PWM_sig, &htim1);
 	}
 }
 
@@ -68,7 +68,7 @@ void app_main()
 {
 	CAN_init(&hcan);
 	ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
-	PWM_initialize(&PWM_sig, 1000, 1, &htim1);
+	PWM_IC_Init(&PWM_sig, &htim1, 1000, 1);
 
 	/*
 	 * LEDs
@@ -104,7 +104,7 @@ void app_main()
 		case Type2_IDLE:
 			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			// TODO remove testing values for CP
-			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
+			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty);
 
 			if(maxChargerCurrent > 0)
 			{
@@ -120,7 +120,7 @@ void app_main()
 			LED_Handle(&Type2_RED_LED);
 		case Type2_CHARGING:
 			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
-			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
+			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty);
 			//TODO stop charging
 			if(maxChargerCurrent <= 0)
 			{
@@ -179,6 +179,7 @@ static void stopCharging()
 /*
  * @brief Detects voltage on phases
  */
+//TODO test
 static void updateTransoptorVoltage()
 {
 	if(HAL_GPIO_ReadPin(L1_SENSOR_GPIO_Port, L1_SENSOR_Pin) == GPIO_PIN_SET)
@@ -227,8 +228,8 @@ static void chargerGetData(uint8_t *data, void *context)
 	data[2] = GET_BYTE(maxChargerCurrentInt, 0);
 	data[3] = GET_BYTE(maxChargerCurrentInt, 1);
 
-	// charging is requested whenever this function is called;
-	uint8_t control = 1;
+	// charging is requested (control = 0) whenever this function is called;
+	uint8_t control = 0;
 	data[4] = SWAP_ENDIANNESS(control);
 }
 
