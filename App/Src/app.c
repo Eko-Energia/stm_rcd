@@ -27,8 +27,7 @@ static struct CAN_scheduledMsgList CAN_buffer;
 /*
 * ADC
 */
-static ADC_BufferTypeDef ADC_buffer;
-static ADC_ChannelsTypeDef ADC_channels;
+static ADC_ChannelsConfigTypeDefs ADC_channels;
 
 /*
 * PWM
@@ -67,7 +66,7 @@ static void chargerGetData(uint8_t *data, void *context);
 void app_main()
 {
 	CAN_init(&hcan);
-	ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
+	ADC_Init(&hadc1, &ADC_channels);
 	PWM_IC_Init(&PWM_sig, &htim1, 1000, 1);
 
 	/*
@@ -87,14 +86,13 @@ void app_main()
 	while(1)
 	{	
 		updateTransoptorVoltage();
+		ADC_Get_PinVoltage(&hadc1, &ADC_channels, PP_ADC_CHANNEL, &PP_voltage);
 		//TODO add safety checks for each state
 		// Type2_state informs what should be happening
 		switch(Type2_state)
 		{
 		case Type2_DISCONNECTED:
-
 			//TODO olac jezeli jedzie
-			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			if(PP_voltage < PP_VOLTAGE_DISCONNECTED)
 			{
 				Type2_state = Type2_IDLE;
@@ -102,10 +100,7 @@ void app_main()
 			}
 			break;
 		case Type2_IDLE:
-			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
-			// TODO remove testing values for CP
 			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty);
-
 			if(maxChargerCurrent > 0)
 			{
 				startCharging();
@@ -116,10 +111,7 @@ void app_main()
 				LED_ChangeState(&Type2_RED_LED, LED_OFF);
 			}
 			break;
-			LED_Handle(&Type2_GREEN_LED);
-			LED_Handle(&Type2_RED_LED);
 		case Type2_CHARGING:
-			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty);
 			//TODO stop charging
 			if(maxChargerCurrent <= 0)
@@ -127,11 +119,10 @@ void app_main()
 				stopCharging();
 			}
 			break;
-			LED_Handle(&Type2_GREEN_LED);
-			LED_Handle(&Type2_RED_LED);
 		}
 
-
+		LED_Handle(&Type2_GREEN_LED);
+		LED_Handle(&Type2_RED_LED);
 		LED_Handle(&GREEN_LED);
 		LED_Handle(&RED_LED);
 		CAN_handleScheduled(&hcan, &CAN_buffer);

@@ -57,8 +57,6 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define RCD_PWM_Pin GPIO_PIN_0
-#define RCD_PWM_GPIO_Port GPIOA
 #define TYPE2_LED_RED_Pin GPIO_PIN_1
 #define TYPE2_LED_RED_GPIO_Port GPIOA
 #define LED_RED_Pin GPIO_PIN_2
@@ -77,6 +75,8 @@ void Error_Handler(void);
 #define PP_GPIO_Port GPIOB
 #define CP_Pin GPIO_PIN_8
 #define CP_GPIO_Port GPIOA
+#define RCD_PWM_Pin GPIO_PIN_15
+#define RCD_PWM_GPIO_Port GPIOA
 #define RCD_FAULT_Pin GPIO_PIN_3
 #define RCD_FAULT_GPIO_Port GPIOB
 #define RCD_ERROR_Pin GPIO_PIN_4
