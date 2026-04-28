@@ -3,6 +3,7 @@
 #include "can_driver.h"
 #include "adc_driver.h"
 #include "pwm_driver.h"
+#include "led_driver.h"
 #include "main.h"
 
 /*
@@ -55,9 +56,6 @@ typedef enum
 
 static phaseStatus_e phaseStatus = PHASE_UNPOWERED;
 
-uint32_t LED_RED_lastTick = 0;
-uint32_t LED_GREEN_lastTick = 0;
-
 /*
  * Private function prototypes
  */
@@ -72,6 +70,15 @@ void app_main()
 	ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
 	PWM_initialize(&PWM_sig, 1000, 1, &htim1);
 
+	struct LED GREEN_LED = {LED_OFF, LED_GREEN_GPIO_Port, LED_GREEN_Pin, 0};
+	struct LED RED_LED = {LED_OFF, LED_RED_GPIO_Port, LED_RED_Pin, 0};
+	struct LED Type2_GREEN_LED = {LED_OFF, TYPE2_LED_GREEN_GPIO_Port, TYPE2_LED_GREEN_Pin, 0};
+	struct LED Type2_RED_LED = {LED_OFF, TYPE2_LED_RED_GPIO_Port, TYPE2_LED_RED_Pin, 0};
+
+	LED_ChangeState(&GREEN_LED, LED_BLINK);
+	LED_ChangeState(&RED_LED, LED_BLINK);
+	LED_ChangeState(&Type2_RED_LED, LED_BLINK);
+
 	// switch relays off
 	// TODO off for testing purposes RCD_FAULT is set to input (no clicking)
 	//HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_RESET);
@@ -81,6 +88,8 @@ void app_main()
 	while(1)
 	{	
 		updateTransoptorVoltage();
+		ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
+
 		//TODO add safety checks for each state
 		// Type2_state informs what should be happening
 		switch(Type2_state)
@@ -88,47 +97,45 @@ void app_main()
 		case Type2_DISCONNECTED:
 
 			//TODO olac jezeli jedzie
-			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			if(PP_voltage < PP_VOLTAGE_DISCONNECTED)
 			{
 				Type2_state = Type2_IDLE;
+				LED_ChangeState(&Type2_RED_LED, LED_ON);
 			}
 			break;
 		case Type2_IDLE:
-			if(LED_RED_lastTick < HAL_GetTick() - 400)
-			{
-				HAL_GPIO_TogglePin(TYPE2_LED_RED_GPIO_Port, TYPE2_LED_RED_Pin);
-				LED_RED_lastTick = HAL_GetTick();
-			}
-			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
-			// TODO remove testing values for CP
 			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
 
 			if(maxChargerCurrent > 0)
 			{
 				startCharging();
+				Type2_state = Type2_CHARGING;
+				LED_ChangeState(&Type2_GREEN_LED, LED_BLINK);
+				LED_ChangeState(&Type2_RED_LED, LED_ON);
 			}
 			else if (PP_voltage > PP_VOLTAGE_DISCONNECTED)
 			{
 				Type2_state = Type2_DISCONNECTED;
+				LED_ChangeState(&Type2_RED_LED, LED_BLINK);
 			}
 			break;
 		case Type2_CHARGING:
-			if(LED_GREEN_lastTick < HAL_GetTick() - 400)
-			{
-				HAL_GPIO_TogglePin(TYPE2_LED_GREEN_GPIO_Port, TYPE2_LED_GREEN_Pin);
-				LED_GREEN_lastTick = HAL_GetTick();
-			}
-			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
 			//TODO stop charging
 			if(maxChargerCurrent <= 0)
 			{
 				stopCharging();
+				Type2_state = Type2_IDLE;
+				LED_ChangeState(&Type2_RED_LED, LED_ON);
+				LED_ChangeState(&Type2_GREEN_LED, LED_OFF);
 			}
 			break;
 		}
 
+		LED_Handle(&RED_LED);
+		LED_Handle(&GREEN_LED);
+		LED_Handle(&Type2_GREEN_LED);
+		LED_Handle(&Type2_RED_LED);
 		CAN_handleScheduled(&hcan, &CAN_buffer);
 	}
 }
@@ -156,8 +163,6 @@ static void startCharging()
 
 	chargerComms.header.ExtId = CANID_RCD_STATIC_CHARGER3COMMS;
 	CAN_addScheduledMessage(chargerComms, &CAN_buffer);
-
-	Type2_state = Type2_CHARGING;
 }
 
 static void stopCharging()
@@ -167,8 +172,6 @@ static void stopCharging()
 	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER1COMMS, &CAN_buffer);
 	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER2COMMS, &CAN_buffer);
 	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER3COMMS, &CAN_buffer);
-
-	Type2_state = Type2_IDLE;
 }
 
 /*
@@ -223,7 +226,7 @@ static void chargerGetData(uint8_t *data, void *context)
 	data[3] = GET_BYTE(maxChargerCurrentInt, 1);
 
 	// charging is requested whenever this function is called;
-	uint8_t control = 1;
+	uint8_t control = 0;
 	data[4] = SWAP_ENDIANNESS(control);
 }
 
