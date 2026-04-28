@@ -33,12 +33,12 @@ static ADC_ChannelsTypeDef ADC_channels;
 /*
 * PWM
 */
-static struct PWM_signal PWM_sig;
+static struct PWM_IC_signal PWM_sig;
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim->Channel == CP_PWM_CHANNEL)
 	{
-		PWM_update(&htim1, &PWM_sig);
+		PWM_IC_update(&PWM_sig, &htim1);
 	}
 }
 
@@ -68,7 +68,7 @@ void app_main()
 {
 	CAN_init(&hcan);
 	ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
-	PWM_initialize(&PWM_sig, 1000, 1, &htim1);
+	PWM_IC_Init(&PWM_sig, &htim1, 1000, 1);
 
 	struct LED GREEN_LED = {LED_OFF, LED_GREEN_GPIO_Port, LED_GREEN_Pin, 0};
 	struct LED RED_LED = {LED_OFF, LED_RED_GPIO_Port, LED_RED_Pin, 0};
@@ -76,8 +76,6 @@ void app_main()
 	struct LED Type2_RED_LED = {LED_OFF, TYPE2_LED_RED_GPIO_Port, TYPE2_LED_RED_Pin, 0};
 
 	LED_ChangeState(&GREEN_LED, LED_BLINK);
-	LED_ChangeState(&RED_LED, LED_BLINK);
-	LED_ChangeState(&Type2_RED_LED, LED_BLINK);
 
 	// switch relays off
 	// TODO off for testing purposes RCD_FAULT is set to input (no clicking)
@@ -101,10 +99,11 @@ void app_main()
 			{
 				Type2_state = Type2_IDLE;
 				LED_ChangeState(&Type2_RED_LED, LED_ON);
+				HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_SET);
 			}
 			break;
 		case Type2_IDLE:
-			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
+			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty);
 
 			if(maxChargerCurrent > 0)
 			{
@@ -116,11 +115,12 @@ void app_main()
 			else if (PP_voltage > PP_VOLTAGE_DISCONNECTED)
 			{
 				Type2_state = Type2_DISCONNECTED;
-				LED_ChangeState(&Type2_RED_LED, LED_BLINK);
+				LED_ChangeState(&Type2_RED_LED, LED_OFF);
+				HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_RESET);
 			}
 			break;
 		case Type2_CHARGING:
-			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
+			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty);
 			//TODO stop charging
 			if(maxChargerCurrent <= 0)
 			{
@@ -132,6 +132,7 @@ void app_main()
 			break;
 		}
 
+		PWM_IC_Monitor(&PWM_sig, CP_GPIO_Port, CP_Pin);
 		LED_Handle(&RED_LED);
 		LED_Handle(&GREEN_LED);
 		LED_Handle(&Type2_GREEN_LED);
