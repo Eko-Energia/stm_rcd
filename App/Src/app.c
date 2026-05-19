@@ -19,32 +19,38 @@ extern ADC_HandleTypeDef hadc1;
 static float maxChargerCurrent = 0;
 static Type2_StateTypeDef Type2_state = Type2_DISCONNECTED;
 
+CAN_RxHeaderTypeDef rxHeader;
+uint32_t rxFifo = 0;
+uint8_t data[8];
+
 /*
  * CAN
  */
 static struct CAN_scheduledMsgList CAN_buffer;
 
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+	HAL_CAN_GetRxMessage(hcan, rxFifo, &rxHeader, data);
+}
+
 /*
-* ADC
-*/
+ * ADC
+ */
 static ADC_BufferTypeDef ADC_buffer;
 static ADC_ChannelsTypeDef ADC_channels;
 
 /*
-* PWM
-*/
+ * PWM
+ */
 static struct PWM_IC_signal PWM_sig;
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
-{
-	if(htim->Channel == CP_PWM_CHANNEL)
-	{
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
+	if (htim->Channel == CP_PWM_CHANNEL) {
 		PWM_IC_update(&PWM_sig, &htim1);
 	}
 }
 
 // used to
-typedef enum
-{
+typedef enum {
 	PHASE_UNPOWERED = 0x0,
 	PHASE1_SET = 0x1,
 	PHASE2_SET = 0x2,
@@ -64,16 +70,18 @@ static void startCharging();
 static void stopCharging();
 static void chargerGetData(uint8_t *data, void *context);
 
-void app_main()
-{
+void app_main() {
 	CAN_init(&hcan);
-	ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
+	//ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
+	HAL_ADC_Start(&hadc1);
 	PWM_IC_Init(&PWM_sig, &htim1, 1000, 1);
 
-	struct LED GREEN_LED = {LED_OFF, LED_GREEN_GPIO_Port, LED_GREEN_Pin, 0};
-	struct LED RED_LED = {LED_OFF, LED_RED_GPIO_Port, LED_RED_Pin, 0};
-	struct LED Type2_GREEN_LED = {LED_OFF, TYPE2_LED_GREEN_GPIO_Port, TYPE2_LED_GREEN_Pin, 0};
-	struct LED Type2_RED_LED = {LED_OFF, TYPE2_LED_RED_GPIO_Port, TYPE2_LED_RED_Pin, 0};
+	struct LED GREEN_LED = { LED_OFF, LED_GREEN_GPIO_Port, LED_GREEN_Pin, 0 };
+	struct LED RED_LED = { LED_OFF, LED_RED_GPIO_Port, LED_RED_Pin, 0 };
+	struct LED Type2_GREEN_LED = { LED_OFF, TYPE2_LED_GREEN_GPIO_Port,
+			TYPE2_LED_GREEN_Pin, 0 };
+	struct LED Type2_RED_LED = { LED_OFF, TYPE2_LED_RED_GPIO_Port,
+			TYPE2_LED_RED_Pin, 0 };
 
 	LED_ChangeState(&GREEN_LED, LED_BLINK);
 
@@ -81,55 +89,88 @@ void app_main()
 	// TODO off for testing purposes RCD_FAULT is set to input (no clicking)
 	//HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_RESET);
 
-	float PP_voltage = 0;
+	uint32_t raw_adc_value = 0;
+	float PP_voltage = 0.0f;
+	const float VREF = 3.28f;
 
-	while(1)
-	{	
-		updateTransoptorVoltage();
-		ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
+	while (1)
+	{
+
+	// --- 5-Sample Trimmed Mean ADC Reading ---
+			uint32_t adc_samples[5];
+			uint32_t sum = 0;
+			uint32_t min_val = 0xFFFFFFFF; // Max possible uint32 value
+			uint32_t max_val = 0;
+
+			for (int i = 0; i < 5; i++) {
+				// Wait for the conversion to finish (10ms timeout)
+				if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
+				{
+					adc_samples[i] = HAL_ADC_GetValue(&hadc1);
+				}
+				else
+				{
+					adc_samples[i] = raw_adc_value; // Fallback to last known good value if timeout occurs
+				}
+
+				// Add to total sum
+				sum += adc_samples[i];
+
+				// Find highest and lowest values
+				if (adc_samples[i] < min_val) min_val = adc_samples[i];
+				if (adc_samples[i] > max_val) max_val = adc_samples[i];
+			}
+
+			// Eliminate the lowest and highest values, average the remaining 3
+			raw_adc_value = (sum - min_val - max_val) / 3;
+
+			// Calculate the final stabilized voltage
+			PP_voltage = ((float)raw_adc_value * VREF) / 4095.0f;
+			// -----------------------------------------
 
 		//TODO add safety checks for each state
 		// Type2_state informs what should be happening
-		switch(Type2_state)
+		switch (Type2_state)
 		{
-		case Type2_DISCONNECTED:
+			case Type2_DISCONNECTED:
 
-			//TODO olac jezeli jedzie
-			if(PP_voltage < PP_VOLTAGE_DISCONNECTED)
-			{
-				Type2_state = Type2_IDLE;
-				LED_ChangeState(&Type2_RED_LED, LED_ON);
-				HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_SET);
-			}
-			break;
-		case Type2_IDLE:
-			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty);
+				//TODO olac jezeli jedzie
+				if (PP_voltage < PP_VOLTAGE_DISCONNECTED)
+					{
+						Type2_state = Type2_IDLE;
+						LED_ChangeState(&Type2_RED_LED, LED_ON);
+						HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_SET);
+					}
+				break;
+			case Type2_IDLE:
+				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage,PWM_sig.duty);
 
-			if(maxChargerCurrent > 0)
-			{
-				startCharging();
-				Type2_state = Type2_CHARGING;
-				LED_ChangeState(&Type2_GREEN_LED, LED_BLINK);
-				LED_ChangeState(&Type2_RED_LED, LED_ON);
-			}
-			else if (PP_voltage > PP_VOLTAGE_DISCONNECTED)
-			{
-				Type2_state = Type2_DISCONNECTED;
-				LED_ChangeState(&Type2_RED_LED, LED_OFF);
-				HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_RESET);
-			}
-			break;
-		case Type2_CHARGING:
-			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty);
-			//TODO stop charging
-			if(maxChargerCurrent <= 0)
-			{
-				stopCharging();
-				Type2_state = Type2_IDLE;
-				LED_ChangeState(&Type2_RED_LED, LED_ON);
-				LED_ChangeState(&Type2_GREEN_LED, LED_OFF);
-			}
-			break;
+				if (maxChargerCurrent > 0)
+				{
+					startCharging();
+					Type2_state = Type2_CHARGING;
+					LED_ChangeState(&Type2_GREEN_LED, LED_BLINK);
+					LED_ChangeState(&Type2_RED_LED, LED_ON);
+				}
+				else if (PP_voltage > PP_VOLTAGE_DISCONNECTED)
+				{
+					Type2_state = Type2_DISCONNECTED;
+					LED_ChangeState(&Type2_RED_LED, LED_OFF);
+					HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin,
+							GPIO_PIN_RESET);
+				}
+				break;
+			case Type2_CHARGING:
+				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty);
+				//TODO stop charging
+				if (maxChargerCurrent <= 0)
+				{
+					stopCharging();
+					Type2_state = Type2_IDLE;
+					LED_ChangeState(&Type2_RED_LED, LED_ON);
+					LED_ChangeState(&Type2_GREEN_LED, LED_OFF);
+				}
+				break;
 		}
 
 		PWM_IC_Monitor(&PWM_sig, CP_GPIO_Port, CP_Pin);
@@ -144,9 +185,9 @@ void app_main()
 /*
  * Private function definitions
  */
-static void startCharging()
-{
-	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin, GPIO_PIN_SET);
+static void startCharging() {
+	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin,
+			GPIO_PIN_SET);
 
 	struct CAN_scheduledMsg chargerComms;
 	chargerComms.header.DLC = 5;
@@ -166,9 +207,9 @@ static void startCharging()
 	CAN_addScheduledMessage(chargerComms, &CAN_buffer);
 }
 
-static void stopCharging()
-{
-	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin, GPIO_PIN_RESET);
+static void stopCharging() {
+	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin,
+			GPIO_PIN_RESET);
 
 	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER1COMMS, &CAN_buffer);
 	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER2COMMS, &CAN_buffer);
@@ -178,38 +219,27 @@ static void stopCharging()
 /*
  * @brief Detects voltage on phases
  */
-static void updateTransoptorVoltage()
-{
-	if(HAL_GPIO_ReadPin(L1_SENSOR_GPIO_Port, L1_SENSOR_Pin) == GPIO_PIN_SET)
-	{
+static void updateTransoptorVoltage() {
+	if (HAL_GPIO_ReadPin(L1_SENSOR_GPIO_Port, L1_SENSOR_Pin) == GPIO_PIN_SET) {
 		phaseStatus |= PHASE1_SET;
-	}
-	else
-	{
+	} else {
 		phaseStatus &= PHASE1_RESET;
 	}
 
-	if(HAL_GPIO_ReadPin(L2_SENSOR_GPIO_Port, L2_SENSOR_Pin) == GPIO_PIN_SET)
-	{
+	if (HAL_GPIO_ReadPin(L2_SENSOR_GPIO_Port, L2_SENSOR_Pin) == GPIO_PIN_SET) {
 		phaseStatus |= PHASE2_SET;
-	}
-	else
-	{
+	} else {
 		phaseStatus &= PHASE2_RESET;
 	}
 
-	if(HAL_GPIO_ReadPin(L3_SENSOR_GPIO_Port, L3_SENSOR_Pin) == GPIO_PIN_SET)
-	{
+	if (HAL_GPIO_ReadPin(L3_SENSOR_GPIO_Port, L3_SENSOR_Pin) == GPIO_PIN_SET) {
 		phaseStatus |= PHASE3_SET;
-	}
-	else
-	{
+	} else {
 		phaseStatus &= PHASE3_RESET;
 	}
 }
 
-static void chargerGetData(uint8_t *data, void *context)
-{
+static void chargerGetData(uint8_t *data, void *context) {
 	// preserve one decimal place
 	float maxCurrent = maxChargerCurrent * 10;
 	float maxVoltage = MAX_CHARGER_VOLTAGE * 10;
@@ -228,7 +258,6 @@ static void chargerGetData(uint8_t *data, void *context)
 
 	// charging is requested whenever this function is called;
 	uint8_t control = 0;
-	data[4] = SWAP_ENDIANNESS(control);
+data[4] = SWAP_ENDIANNESS(control);
 }
-
 
