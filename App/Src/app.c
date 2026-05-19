@@ -34,12 +34,6 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 }
 
 /*
- * ADC
- */
-static ADC_BufferTypeDef ADC_buffer;
-static ADC_ChannelsTypeDef ADC_channels;
-
-/*
  * PWM
  */
 static struct PWM_IC_signal PWM_sig;
@@ -65,23 +59,20 @@ static phaseStatus_e phaseStatus = PHASE_UNPOWERED;
 /*
  * Private function prototypes
  */
-static void updateTransoptorVoltage();
+static void updateTransoptor();
 static void startCharging();
 static void stopCharging();
 static void chargerGetData(uint8_t *data, void *context);
 
 void app_main() {
 	CAN_init(&hcan);
-	//ADC_Init(&hadc1, &ADC_buffer, &ADC_channels);
 	HAL_ADC_Start(&hadc1);
 	PWM_IC_Init(&PWM_sig, &htim1, 1000, 1);
 
 	struct LED GREEN_LED = { LED_OFF, LED_GREEN_GPIO_Port, LED_GREEN_Pin, 0 };
 	struct LED RED_LED = { LED_OFF, LED_RED_GPIO_Port, LED_RED_Pin, 0 };
-	struct LED Type2_GREEN_LED = { LED_OFF, TYPE2_LED_GREEN_GPIO_Port,
-			TYPE2_LED_GREEN_Pin, 0 };
-	struct LED Type2_RED_LED = { LED_OFF, TYPE2_LED_RED_GPIO_Port,
-			TYPE2_LED_RED_Pin, 0 };
+	struct LED Type2_GREEN_LED = { LED_OFF, TYPE2_LED_GREEN_GPIO_Port, TYPE2_LED_GREEN_Pin, 0};
+	struct LED Type2_RED_LED = { LED_OFF, TYPE2_LED_RED_GPIO_Port, TYPE2_LED_RED_Pin, 0};
 
 	LED_ChangeState(&GREEN_LED, LED_BLINK);
 
@@ -95,38 +86,39 @@ void app_main() {
 
 	while (1)
 	{
+		updateTransoptor();
 
 	// --- 5-Sample Trimmed Mean ADC Reading ---
-			uint32_t adc_samples[5];
-			uint32_t sum = 0;
-			uint32_t min_val = 0xFFFFFFFF; // Max possible uint32 value
-			uint32_t max_val = 0;
+		uint32_t adc_samples[5];
+		uint32_t sum = 0;
+		uint32_t min_val = 0xFFFFFFFF; // Max possible uint32 value
+		uint32_t max_val = 0;
 
-			for (int i = 0; i < 5; i++) {
-				// Wait for the conversion to finish (10ms timeout)
-				if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
-				{
-					adc_samples[i] = HAL_ADC_GetValue(&hadc1);
-				}
-				else
-				{
-					adc_samples[i] = raw_adc_value; // Fallback to last known good value if timeout occurs
-				}
-
-				// Add to total sum
-				sum += adc_samples[i];
-
-				// Find highest and lowest values
-				if (adc_samples[i] < min_val) min_val = adc_samples[i];
-				if (adc_samples[i] > max_val) max_val = adc_samples[i];
+		for (int i = 0; i < 5; i++) {
+			// Wait for the conversion to finish (10ms timeout)
+			if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
+			{
+				adc_samples[i] = HAL_ADC_GetValue(&hadc1);
+			}
+			else
+			{
+				adc_samples[i] = raw_adc_value; // Fallback to last known good value if timeout occurs
 			}
 
-			// Eliminate the lowest and highest values, average the remaining 3
-			raw_adc_value = (sum - min_val - max_val) / 3;
+			// Add to total sum
+			sum += adc_samples[i];
 
-			// Calculate the final stabilized voltage
-			PP_voltage = ((float)raw_adc_value * VREF) / 4095.0f;
-			// -----------------------------------------
+			// Find highest and lowest values
+			if (adc_samples[i] < min_val) min_val = adc_samples[i];
+			if (adc_samples[i] > max_val) max_val = adc_samples[i];
+		}
+
+		// Eliminate the lowest and highest values, average the remaining 3
+		raw_adc_value = (sum - min_val - max_val) / 3;
+
+		// Calculate the final stabilized voltage
+		PP_voltage = ((float)raw_adc_value * VREF) / 4095.0f;
+		// -----------------------------------------
 
 		//TODO add safety checks for each state
 		// Type2_state informs what should be happening
@@ -219,7 +211,8 @@ static void stopCharging() {
 /*
  * @brief Detects voltage on phases
  */
-static void updateTransoptorVoltage() {
+static void updateTransoptor()
+{
 	if (HAL_GPIO_ReadPin(L1_SENSOR_GPIO_Port, L1_SENSOR_Pin) == GPIO_PIN_SET) {
 		phaseStatus |= PHASE1_SET;
 	} else {
@@ -258,6 +251,6 @@ static void chargerGetData(uint8_t *data, void *context) {
 
 	// charging is requested whenever this function is called;
 	uint8_t control = 0;
-data[4] = SWAP_ENDIANNESS(control);
+	data[4] = SWAP_ENDIANNESS(control);
 }
 
