@@ -19,25 +19,85 @@ extern ADC_HandleTypeDef hadc1;
 static float maxChargerCurrent = 0;
 static Type2_StateTypeDef Type2_state = Type2_DISCONNECTED;
 
-CAN_RxHeaderTypeDef rxHeader;
-uint32_t rxFifo = 0;
-uint8_t data[8];
-
 /*
  * CAN
  */
+// incoming CAN message FIFO (capacity 5)
+#define CAN_INCOMING_CAPACITY 5
+uint8_t CAN_receiveFlag = 0;
+
+typedef struct {
+	CAN_RxHeaderTypeDef header;
+	uint8_t data[8];
+} CAN_IncomingMsg_t;
+
+static CAN_IncomingMsg_t CAN_incomingBuffer[CAN_INCOMING_CAPACITY];
+static uint8_t CAN_incoming_head = 0; // next write index
+static uint8_t CAN_incoming_tail = 0; // next read index
+static uint8_t CAN_incoming_count = 0;
+
 static struct CAN_scheduledMsgList CAN_buffer;
+
+HAL_StatusTypeDef CAN_addIncomingMessage(CAN_RxHeaderTypeDef *header, uint8_t *data) {
+	if (CAN_incoming_count >= CAN_INCOMING_CAPACITY) {
+		// TODO error handler
+		return HAL_ERROR;
+	}
+
+	// copy header and data
+	CAN_incomingBuffer[CAN_incoming_head].header = *header;
+	for (int i = 0; i < 8; i++) {
+		CAN_incomingBuffer[CAN_incoming_head].data[i] = data[i];
+	}
+
+	CAN_incoming_head = (CAN_incoming_head + 1) % CAN_INCOMING_CAPACITY;
+	CAN_incoming_count++;
+	return HAL_OK;
+}
+
+HAL_StatusTypeDef CAN_getLatestMessage(CAN_IncomingMsg_t *msg) {
+	if (CAN_incoming_count == 0) {
+		return HAL_ERROR;
+	}
+
+	// Get message from tail (oldest message in FIFO)
+	*msg = CAN_incomingBuffer[CAN_incoming_tail];
+	CAN_incoming_tail = (CAN_incoming_tail + 1) % CAN_INCOMING_CAPACITY;
+	CAN_incoming_count--;
+	return HAL_OK;
+}
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
-	HAL_CAN_GetRxMessage(hcan, rxFifo, &rxHeader, data);
+	CAN_RxHeaderTypeDef rxHeader;
+	uint8_t data[8];
+	// read the message from FIFO0
+	if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rxHeader, data) == HAL_OK) {
+		// try to enqueue, set flag if successful
+		if (CAN_addIncomingMessage(&rxHeader, data) == HAL_OK) {
+			CAN_receiveFlag = 1;
+		}
+	}
 }
 
-/*
- * ADC
- */
-static ADC_BufferTypeDef ADC_buffer;
-static ADC_ChannelsTypeDef ADC_channels;
+void CAN_passIncoming()
+{
+	CAN_IncomingMsg_t incMsg;
+
+	if(CAN_getLatestMessage(&incMsg) != HAL_OK)
+	{
+		return;
+	}
+
+	CAN_TxHeaderTypeDef txMsg;
+	txMsg.StdId = incMsg.header.StdId;
+	txMsg.ExtId = incMsg.header.ExtId;
+	txMsg.DLC = incMsg.header.DLC;
+	txMsg.IDE = incMsg.header.IDE;
+	txMsg.RTR = incMsg.header.RTR;
+
+	HAL_CAN_AddTxMessage(&hcan, &txMsg, incMsg.data, &CAN_buffer.txMailbox);
+}
 
 /*
  * PWM
@@ -95,6 +155,7 @@ void app_main() {
 
 	while (1)
 	{
+		updateTransoptorVoltage();
 
 	// --- 5-Sample Trimmed Mean ADC Reading ---
 			uint32_t adc_samples[5];
@@ -143,7 +204,7 @@ void app_main() {
 					}
 				break;
 			case Type2_IDLE:
-				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage,PWM_sig.duty);
+				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage,PWM_sig.duty,0,0);
 
 				if (maxChargerCurrent > 0)
 				{
@@ -161,7 +222,7 @@ void app_main() {
 				}
 				break;
 			case Type2_CHARGING:
-				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty);
+				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty,0,0);
 				//TODO stop charging
 				if (maxChargerCurrent <= 0)
 				{
@@ -172,6 +233,7 @@ void app_main() {
 				}
 				break;
 		}
+
 
 		PWM_IC_Monitor(&PWM_sig, CP_GPIO_Port, CP_Pin);
 		LED_Handle(&RED_LED);
@@ -258,6 +320,6 @@ static void chargerGetData(uint8_t *data, void *context) {
 
 	// charging is requested whenever this function is called;
 	uint8_t control = 0;
-data[4] = SWAP_ENDIANNESS(control);
+	data[4] = SWAP_ENDIANNESS(control);
 }
 
