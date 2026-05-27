@@ -25,7 +25,7 @@
 #define MAX_CHARGER_VOLTAGE (87)
 #define MAX_TYPE2_CURRENT (16)
 #define MAX_TYPE2_VOLTAGE (400)
-#define MAX_PP_VOLTAGE (3.3f)
+#define PP_MAX_VOLTAGE (3.3f)
 #define PP_VOLTAGE_DISCONNECTED (2.2f)
 #define CURVE_C (300)
 /*
@@ -41,8 +41,7 @@ typedef enum {
  * Utils
  */
 
-float Type2_MaxChargerCurrent(float PP_voltage, float CP_duty, float BMS_temp, float BMS_voltage);
-
+float Type2_MaxChargerCurrent(float PP_voltage, float CP_duty, float BMS_temp);
 
 /*
  * CP

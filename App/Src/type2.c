@@ -27,28 +27,46 @@ static uint8_t PP_GetMaxCurrent(float voltage);
  * @brief Calculates maximum current wynikające z krzywej ładowania
  * @retval Maxiumum combined current (3 chargers)
  */
-static float MaxCurveCurrent(float BMS_temp, float BMS_voltage)
+static float MaxCurveCurrent(float BMS_temp)
 {
-	float maxCurrent = 0;
+	if(BMS_temp < 0.0f)
+	{
+		return 0.0f;
+	}
 
+	if(BMS_temp < 10.0f)
+	{
+		return CURVE_C * 0.1f;
+	}
 
+	if(BMS_temp < 45.0f)
+	{
+		return CURVE_C * 0.379f;
+	}
 
-	return maxCurrent;
+	if(BMS_temp > 45.0f)
+	{
+		return 0.0f;
+	}
+
+	return 0;
 }
 
-float Type2_MaxChargerCurrent(float PP_voltage, float CP_duty, float BMS_temp, float BMS_voltage)
+float Type2_MaxChargerCurrent(float PP_voltage, float CP_duty, float BMS_temp)
 {
 	const float CP_maxCurrent = CP_GetMaxCurrent(CP_duty);
 	const float PP_maxCurrent = PP_GetMaxCurrent(PP_voltage);
 
+	// determine maximum current for the charger
 	const float maxCurrent = CP_maxCurrent > PP_maxCurrent ?
 			PP_maxCurrent : CP_maxCurrent;
 
 	// calculate maxCurrent @ 87V
 	// hardcoded sqrt(3) bo na chuj ma się ciągle liczyć
 	float maxChargerCurrent = (float) MAX_TYPE2_VOLTAGE * maxCurrent * (float) SQRT_3 / (float) MAX_CHARGER_VOLTAGE;
-	float maxCurveCurrent = MaxCurveCurrent(BMS_temp, BMS_voltage);
+	float maxCurveCurrent = MaxCurveCurrent(BMS_temp);
 
+	// determine if battery state allows for higher current
 	maxChargerCurrent = maxCurveCurrent > maxChargerCurrent ?
 			maxChargerCurrent : maxCurveCurrent;
 
