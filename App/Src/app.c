@@ -121,14 +121,12 @@ void app_main() {
 
 	LED_ChangeState(&GREEN_LED, LED_BLINK);
 
-	// switch relays off
-	// TODO off for testing purposes RCD_FAULT is set to input (no clicking)
-	//HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_RESET);
-
 	while (1)
 	{
 		updateTransoptorVoltage();
 		PP_voltage = updatePPVoltage();
+
+		//TODO block charging when not in park dashboard_control
 
 		//TODO add safety checks for each state
 		// Type2_state informs what should be happening
@@ -145,7 +143,7 @@ void app_main() {
 					}
 				break;
 			case Type2_IDLE:
-				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage,PWM_sig.duty, bmsMasterData.batteryTemp);
+				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty, bmsMasterData.batteryTemp);
 
 				if (maxChargerCurrent > 0)
 				{
