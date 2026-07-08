@@ -8,9 +8,10 @@
 #ifndef CAN_DRIVER_H
 #define CAN_DRIVER_H
 
-#include "main.h"
 #include "can_id_list.h"
+#include "main.h"
 #include <stdio.h>
+#include "string.h"
 
 /**
  * Defines
@@ -70,34 +71,84 @@ struct CAN_scheduledMsgList
 };
 
 /**
+ * Incoming CAN message
+ */
+struct CAN_IncomingMsg
+{
+	CAN_RxHeaderTypeDef header;
+	uint8_t data[CAN_MAX_DLC];
+};
+
+/**
+ * Incoming CAN message buffer
+ */
+struct CAN_IncomingMsgList
+{
+	struct CAN_IncomingMsg list[CAN_MAX_MSG];
+	uint8_t head;
+	uint8_t tail;
+	uint8_t count;
+	uint8_t receiveFlag;
+};
+
+/**
  * Setup functions
  */
 
 /**
- * @brief Initialize CAN
+ * @brief Initialize CAN peripheral
  *
- * This function initializes the CAN peripheral.
- *
- * @param hcan      Pointer to CAN handle
+ * @param hcanPtr   Pointer to CAN handle
  */
-void CAN_init(CAN_HandleTypeDef *hcan);
-
-/**
- * @brief Get configured Node ID
- * @return Current Node ID
- */
-uint32_t CAN_getNodeId(void);
-
-/**
- * @brief Process all scheduled CAN messages (call in main loop)
- */
-void CAN_handleScheduled(CAN_HandleTypeDef *hcanPtr, struct CAN_scheduledMsgList *scheduler);
+void CAN_Init(CAN_HandleTypeDef *hcan);
 
 /**
  * Functions for scheduled messages
  */
-HAL_StatusTypeDef CAN_addScheduledMessage(struct CAN_scheduledMsg msg, struct CAN_scheduledMsgList *buffer);
 
-HAL_StatusTypeDef CAN_removeScheduledMessage(uint32_t id, struct CAN_scheduledMsgList *buffer);
+ /**
+ * @brief Process all scheduled CAN messages (call in main loop)
+ *
+ * @param hcanPtr      Pointer to CAN handle
+ * @param scheduler    Pointer to the message scheduler
+ */
+void CAN_HandleScheduled(CAN_HandleTypeDef *hcanPtr, struct CAN_scheduledMsgList *scheduler);
 
-#endif /* INC_CAN_DRIVER_H_ */
+/**
+ * @brief Add new message to the periodic buffer
+ *
+ * @param msg      Pointer to the message to add
+ * @param buffer   Pointer to the buffer that holds messages
+ * @retval HAL_StatusTypeDef   State of the operation
+ */
+HAL_StatusTypeDef CAN_AddScheduledMsg(struct CAN_scheduledMsg *msg, struct CAN_scheduledMsgList *buffer);
+
+/**
+ * @brief Remove message from the periodic buffer
+ *
+ * @param id       ID of the message to remove
+ * @param buffer   Pointer to the buffer that holds messages
+ * @retval HAL_StatusTypeDef   State of the operation
+ */
+HAL_StatusTypeDef CAN_RemoveScheduledMsg(uint32_t id, struct CAN_scheduledMsgList *buffer);
+
+/* Incoming CAN message buffer */
+
+/**
+ * @brief Add incoming CAN message to the FIFO buffer
+ *
+ * @param header  Pointer to received CAN header
+ * @param data    Pointer to received CAN payload
+ * @retval HAL_StatusTypeDef   State of the operation
+ */
+HAL_StatusTypeDef CAN_AddIncomingMsg(struct CAN_IncomingMsgList *buffer, CAN_RxHeaderTypeDef *header, uint8_t *data);
+
+/**
+ * @brief Read the oldest incoming CAN message from the FIFO buffer
+ *
+ * @param msg  Pointer to storage for the received message
+ * @retval HAL_StatusTypeDef   State of the operation
+ */
+HAL_StatusTypeDef CAN_GetLatestMessage(struct CAN_IncomingMsgList *buffer, struct CAN_IncomingMsg *msg);
+
+#endif /* CAN_DRIVER_H */
