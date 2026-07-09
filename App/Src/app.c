@@ -99,7 +99,7 @@ static phaseStatus_e phaseStatus = PHASE_UNPOWERED;
 /*
  * Private function prototypes
  */
-static void updateTransoptor();
+static void updateTransoptorVoltage();
 static void startCharging();
 static void stopCharging();
 static void chargerGetData(uint8_t *data, void *context);
@@ -218,7 +218,7 @@ static void stopCharging() {
 /*
  * @brief Detects voltage on phases
  */
-static void updateTransoptor()
+static void updateTransoptorVoltage()
 {
 	if (HAL_GPIO_ReadPin(L1_SENSOR_GPIO_Port, L1_SENSOR_Pin) == GPIO_PIN_SET) {
 		phaseStatus |= PHASE1_SET;
