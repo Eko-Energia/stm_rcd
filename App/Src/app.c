@@ -18,19 +18,59 @@ extern ADC_HandleTypeDef hadc1;
  */
 static float maxChargerCurrent = 0;
 static Type2_StateTypeDef Type2_state = Type2_DISCONNECTED;
-
-CAN_RxHeaderTypeDef rxHeader;
-uint32_t rxFifo = 0;
-uint8_t data[8];
+static float PP_voltage = PP_MAX_VOLTAGE;
+uint32_t raw_adc_value = 0;
 
 /*
  * CAN
  */
-static struct CAN_scheduledMsgList CAN_buffer;
+static struct CAN_IncomingMsgList CAN_RxBuffer = {0};
+static struct CAN_scheduledMsgList CAN_buffer = {0};
+
+/*
+ * Unpacked CAN RX data
+ */
+typedef struct {
+	float outputVoltage;
+	float outputCurrent;
+	uint8_t hardwareFailure;
+	uint8_t overTemp;
+	uint8_t inputVoltageErr;
+	uint8_t startingState;
+	uint8_t commTimeout;
+} ChargerOutput_t;
+
+typedef struct {
+	float batteryVoltage;
+	float batteryCurrent;
+	float batteryTemp;
+} BMSMasterData_t;
+
+typedef struct {
+	float absoluteEncoder;
+	uint8_t prnd;
+} DashboardControl_t;
+
+static ChargerOutput_t charger1Output = {0};
+static ChargerOutput_t charger2Output = {0};
+static ChargerOutput_t charger3Output = {0};
+static BMSMasterData_t bmsMasterData = {0};
+static DashboardControl_t dashboardControl = {0};
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
-	HAL_CAN_GetRxMessage(hcan, rxFifo, &rxHeader, data);
+	CAN_RxHeaderTypeDef header;
+	uint8_t data[8];
+
+	if(HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &header, data) != HAL_OK)
+	{
+		Error_Handler();
+	}
+
+	if(CAN_AddIncomingMsg(&CAN_RxBuffer, &header, data) != HAL_OK)
+	{
+		Error_Handler();
+	}
 }
 
 /*
@@ -63,9 +103,12 @@ static void updateTransoptor();
 static void startCharging();
 static void stopCharging();
 static void chargerGetData(uint8_t *data, void *context);
+static void unpackChargerOutput(const uint8_t *data, ChargerOutput_t *out);
+static void handleRxCanMessages(void);
+static float updatePPVoltage(void);
 
 void app_main() {
-	CAN_init(&hcan);
+	CAN_Init(&hcan);
 	HAL_ADC_Start(&hadc1);
 	PWM_IC_Init(&PWM_sig, &htim1, 1000, 1);
 
@@ -76,17 +119,132 @@ void app_main() {
 
 	LED_ChangeState(&GREEN_LED, LED_BLINK);
 
-	// switch relays off
-	// TODO off for testing purposes RCD_FAULT is set to input (no clicking)
-	//HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_RESET);
-
-	uint32_t raw_adc_value = 0;
-	float PP_voltage = 0.0f;
-	const float VREF = 3.28f;
-
 	while (1)
 	{
-		updateTransoptor();
+		updateTransoptorVoltage();
+		PP_voltage = updatePPVoltage();
+
+		//TODO block charging when not in park dashboard_control
+
+		//TODO add safety checks for each state
+		// Type2_state informs what should be happening
+		switch (Type2_state)
+		{
+			case Type2_DISCONNECTED:
+
+				//TODO olac jezeli jedzie
+				if (PP_voltage < PP_VOLTAGE_DISCONNECTED)
+					{
+						Type2_state = Type2_IDLE;
+						LED_ChangeState(&Type2_RED_LED, LED_ON);
+						HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_SET);
+					}
+				break;
+			case Type2_IDLE:
+				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty, bmsMasterData.batteryTemp);
+
+				if (maxChargerCurrent > 0)
+				{
+					startCharging();
+					Type2_state = Type2_CHARGING;
+					LED_ChangeState(&Type2_GREEN_LED, LED_BLINK);
+					LED_ChangeState(&Type2_RED_LED, LED_ON);
+				}
+				else if (PP_voltage > PP_VOLTAGE_DISCONNECTED)
+				{
+					Type2_state = Type2_DISCONNECTED;
+					LED_ChangeState(&Type2_RED_LED, LED_OFF);
+					HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin,
+							GPIO_PIN_RESET);
+				}
+				break;
+			case Type2_CHARGING:
+				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty, bmsMasterData.batteryTemp);
+				//TODO stop charging
+				if (maxChargerCurrent <= 0)
+				{
+					stopCharging();
+					Type2_state = Type2_IDLE;
+					LED_ChangeState(&Type2_RED_LED, LED_ON);
+					LED_ChangeState(&Type2_GREEN_LED, LED_OFF);
+				}
+				break;
+		}
+
+		handleRxCanMessages();
+		PWM_IC_Monitor(&PWM_sig, CP_GPIO_Port, CP_Pin);
+		LED_Handle(&RED_LED);
+		LED_Handle(&GREEN_LED);
+		LED_Handle(&Type2_GREEN_LED);
+		LED_Handle(&Type2_RED_LED);
+		CAN_HandleScheduled(&hcan, &CAN_buffer);
+	}
+}
+
+/*
+ * Private function definitions
+ */
+static void startCharging() {
+	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin,
+			GPIO_PIN_SET);
+
+	struct CAN_scheduledMsg chargerComms;
+	chargerComms.header.DLC = 5;
+	chargerComms.header.IDE = CAN_ID_EXT;
+	chargerComms.header.RTR = CAN_RTR_DATA;
+	chargerComms.lastTick = 0;
+	chargerComms.periodMs = 1000;
+	chargerComms.getData = chargerGetData;
+
+	chargerComms.header.ExtId = CANID_RCD_STATIC_CHARGER1COMMS;
+	CAN_AddScheduledMsg(&chargerComms, &CAN_buffer);
+
+	chargerComms.header.ExtId = CANID_RCD_STATIC_CHARGER2COMMS;
+	CAN_AddScheduledMsg(&chargerComms, &CAN_buffer);
+
+	chargerComms.header.ExtId = CANID_RCD_STATIC_CHARGER3COMMS;
+	CAN_AddScheduledMsg(&chargerComms, &CAN_buffer);
+}
+
+static void stopCharging() {
+	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin,
+			GPIO_PIN_RESET);
+
+	CAN_RemoveScheduledMsg(CANID_RCD_STATIC_CHARGER1COMMS, &CAN_buffer);
+	CAN_RemoveScheduledMsg(CANID_RCD_STATIC_CHARGER2COMMS, &CAN_buffer);
+	CAN_RemoveScheduledMsg(CANID_RCD_STATIC_CHARGER3COMMS, &CAN_buffer);
+}
+
+/*
+ * @brief Detects voltage on phases
+ */
+static void updateTransoptor()
+{
+	if (HAL_GPIO_ReadPin(L1_SENSOR_GPIO_Port, L1_SENSOR_Pin) == GPIO_PIN_SET) {
+		phaseStatus |= PHASE1_SET;
+	} else {
+		phaseStatus &= PHASE1_RESET;
+	}
+
+	if (HAL_GPIO_ReadPin(L2_SENSOR_GPIO_Port, L2_SENSOR_Pin) == GPIO_PIN_SET) {
+		phaseStatus |= PHASE2_SET;
+	} else {
+		phaseStatus &= PHASE2_RESET;
+	}
+
+	if (HAL_GPIO_ReadPin(L3_SENSOR_GPIO_Port, L3_SENSOR_Pin) == GPIO_PIN_SET) {
+		phaseStatus |= PHASE3_SET;
+	} else {
+		phaseStatus &= PHASE3_RESET;
+	}
+}
+
+/*
+ * @brief Updates PP_voltage
+ */
+static float updatePPVoltage(void)
+{
+	const float VREF = 3.28f;
 
 	// --- 5-Sample Trimmed Mean ADC Reading ---
 		uint32_t adc_samples[5];
@@ -117,121 +275,12 @@ void app_main() {
 		raw_adc_value = (sum - min_val - max_val) / 3;
 
 		// Calculate the final stabilized voltage
-		PP_voltage = ((float)raw_adc_value * VREF) / 4095.0f;
+		return ((float)raw_adc_value * VREF) / 4095.0f;
 		// -----------------------------------------
-
-		//TODO add safety checks for each state
-		// Type2_state informs what should be happening
-		switch (Type2_state)
-		{
-			case Type2_DISCONNECTED:
-
-				//TODO olac jezeli jedzie
-				if (PP_voltage < PP_VOLTAGE_DISCONNECTED)
-					{
-						Type2_state = Type2_IDLE;
-						LED_ChangeState(&Type2_RED_LED, LED_ON);
-						HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_SET);
-					}
-				break;
-			case Type2_IDLE:
-				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage,PWM_sig.duty);
-
-				if (maxChargerCurrent > 0)
-				{
-					startCharging();
-					Type2_state = Type2_CHARGING;
-					LED_ChangeState(&Type2_GREEN_LED, LED_BLINK);
-					LED_ChangeState(&Type2_RED_LED, LED_ON);
-				}
-				else if (PP_voltage > PP_VOLTAGE_DISCONNECTED)
-				{
-					Type2_state = Type2_DISCONNECTED;
-					LED_ChangeState(&Type2_RED_LED, LED_OFF);
-					HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin,
-							GPIO_PIN_RESET);
-				}
-				break;
-			case Type2_CHARGING:
-				maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.duty);
-				//TODO stop charging
-				if (maxChargerCurrent <= 0)
-				{
-					stopCharging();
-					Type2_state = Type2_IDLE;
-					LED_ChangeState(&Type2_RED_LED, LED_ON);
-					LED_ChangeState(&Type2_GREEN_LED, LED_OFF);
-				}
-				break;
-		}
-
-		PWM_IC_Monitor(&PWM_sig, CP_GPIO_Port, CP_Pin);
-		LED_Handle(&RED_LED);
-		LED_Handle(&GREEN_LED);
-		LED_Handle(&Type2_GREEN_LED);
-		LED_Handle(&Type2_RED_LED);
-		CAN_handleScheduled(&hcan, &CAN_buffer);
-	}
 }
-
 /*
- * Private function definitions
+ * CAN
  */
-static void startCharging() {
-	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin,
-			GPIO_PIN_SET);
-
-	struct CAN_scheduledMsg chargerComms;
-	chargerComms.header.DLC = 5;
-	chargerComms.header.IDE = CAN_ID_EXT;
-	chargerComms.header.RTR = CAN_RTR_DATA;
-	chargerComms.lastTick = 0;
-	chargerComms.periodMs = 1000;
-	chargerComms.getData = chargerGetData;
-
-	chargerComms.header.ExtId = CANID_RCD_STATIC_CHARGER1COMMS;
-	CAN_addScheduledMessage(chargerComms, &CAN_buffer);
-
-	chargerComms.header.ExtId = CANID_RCD_STATIC_CHARGER2COMMS;
-	CAN_addScheduledMessage(chargerComms, &CAN_buffer);
-
-	chargerComms.header.ExtId = CANID_RCD_STATIC_CHARGER3COMMS;
-	CAN_addScheduledMessage(chargerComms, &CAN_buffer);
-}
-
-static void stopCharging() {
-	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin,
-			GPIO_PIN_RESET);
-
-	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER1COMMS, &CAN_buffer);
-	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER2COMMS, &CAN_buffer);
-	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER3COMMS, &CAN_buffer);
-}
-
-/*
- * @brief Detects voltage on phases
- */
-static void updateTransoptor()
-{
-	if (HAL_GPIO_ReadPin(L1_SENSOR_GPIO_Port, L1_SENSOR_Pin) == GPIO_PIN_SET) {
-		phaseStatus |= PHASE1_SET;
-	} else {
-		phaseStatus &= PHASE1_RESET;
-	}
-
-	if (HAL_GPIO_ReadPin(L2_SENSOR_GPIO_Port, L2_SENSOR_Pin) == GPIO_PIN_SET) {
-		phaseStatus |= PHASE2_SET;
-	} else {
-		phaseStatus &= PHASE2_RESET;
-	}
-
-	if (HAL_GPIO_ReadPin(L3_SENSOR_GPIO_Port, L3_SENSOR_Pin) == GPIO_PIN_SET) {
-		phaseStatus |= PHASE3_SET;
-	} else {
-		phaseStatus &= PHASE3_RESET;
-	}
-}
-
 static void chargerGetData(uint8_t *data, void *context) {
 	// preserve one decimal place
 	float maxCurrent = maxChargerCurrent * 10;
@@ -252,5 +301,72 @@ static void chargerGetData(uint8_t *data, void *context) {
 	// charging is requested whenever this function is called;
 	uint8_t control = 0;
 	data[4] = SWAP_ENDIANNESS(control);
+}
+
+static void unpackChargerOutput(const uint8_t *data, ChargerOutput_t *out)
+{
+	uint16_t rawVoltage = (uint16_t)data[0] | ((uint16_t)data[1] << 8);
+	uint16_t rawCurrent = (uint16_t)data[2] | ((uint16_t)data[3] << 8);
+	out->outputVoltage = rawVoltage * 0.1f;
+	out->outputCurrent = rawCurrent * 0.1f;
+	out->hardwareFailure    = (data[4] >> 0) & 0x01;
+	out->overTemp           = (data[4] >> 1) & 0x01;
+	out->inputVoltageErr    = (data[4] >> 2) & 0x01;
+	out->startingState      = (data[4] >> 3) & 0x01;
+	out->commTimeout        = (data[4] >> 4) & 0x01;
+}
+
+static void handleRxCanMessages(void)
+{
+	if (!CAN_RxBuffer.receiveFlag) return;
+
+	struct CAN_IncomingMsg msg;
+	while (CAN_GetLatestMessage(&CAN_RxBuffer, &msg) == HAL_OK)
+	{
+		uint8_t *data = msg.data;
+
+		if (msg.header.IDE == CAN_ID_STD)
+		{
+			switch (msg.header.StdId)
+			{
+				case CANID_BMSMASTER_MASTERVOLTCURRTEMP:
+				{
+					uint16_t rawVolt = (uint16_t)data[0] | ((uint16_t)data[1] << 8);
+					uint16_t rawCurr = (uint16_t)data[2] | ((uint16_t)data[3] << 8);
+					uint16_t rawTemp = (uint16_t)data[4] | ((uint16_t)data[5] << 8);
+					bmsMasterData.batteryVoltage = (rawVolt - 12.0f) * 0.0059f;
+					bmsMasterData.batteryCurrent = (rawCurr - 300.0f) * 0.1465f;
+					bmsMasterData.batteryTemp    = (rawTemp - 50.0f) * 0.024f;
+					break;
+				}
+				case CANID_DASHBOARD_CONTROL:
+				{
+					uint16_t rawEncoder = ((uint16_t)data[0] | ((uint16_t)data[1] << 8)) & 0x3FFF;
+					dashboardControl.absoluteEncoder = (rawEncoder - 540.) * 0.06591796875f;
+					dashboardControl.prnd = ((data[1] >> 6) & 0x03) | ((data[2] & 0x3F) << 2);
+					break;
+				}
+				default:
+					break;
+			}
+		}
+		else if (msg.header.IDE == CAN_ID_EXT)
+		{
+			switch (msg.header.ExtId)
+			{
+				case CANID_CHARGER1_STATIC_OUT:
+					unpackChargerOutput(data, &charger1Output);
+					break;
+				case CANID_CHARGER2_STATIC_OUT:
+					unpackChargerOutput(data, &charger2Output);
+					break;
+				case CANID_CHARGER3_STATIC_OUT:
+					unpackChargerOutput(data, &charger3Output);
+					break;
+				default:
+					break;
+			}
+		}
+	}
 }
 
