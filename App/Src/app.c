@@ -19,16 +19,7 @@ extern ADC_HandleTypeDef hadc1;
 static float maxChargerCurrent = 0;
 static Type2_StateTypeDef Type2_state = Type2_DISCONNECTED;
 static float PP_voltage = PP_MAX_VOLTAGE;
-
-/*
-* ADC
-*/
-#define ADC_CHANNELS 1
-#define ADC_SAMPLES 10
-#define PP_ADC_CHANNEL 0
-const float ADC_vRef = 3.3f;
-const float ADC_resolution = 4096.0f;
-uint16_t ADC_buffer[ADC_CHANNELS];
+uint32_t raw_adc_value = 0;
 
 /*
  * CAN
@@ -114,7 +105,7 @@ static void stopCharging();
 static void chargerGetData(uint8_t *data, void *context);
 static void unpackChargerOutput(const uint8_t *data, ChargerOutput_t *out);
 static void handleRxCanMessages(void);
-static float uint8_t ProcessADC1Data(void);
+static float updatePPVoltage(void);
 
 void app_main() {
 	CAN_Init(&hcan);
@@ -131,7 +122,7 @@ void app_main() {
 	while (1)
 	{
 		updateTransoptorVoltage();
-		PP_voltage = ADC_buffer[PP_ADC_CHANNEL];
+		PP_voltage = updatePPVoltage();
 
 		//TODO block charging when not in park dashboard_control
 
@@ -251,62 +242,42 @@ static void updateTransoptorVoltage()
 /*
  * @brief Updates PP_voltage
  */
- static uint8_t ProcessADC1Data(void)
- {
-	 const float ADC_vRef = 3.3f; // Reference voltage
-	 const float ADC_resolution = 4096.0f; // 12-bit ADC resolution
-	 static uint8_t sampleIndex = 0;
-	 static uint8_t samplesCollected = 0;
-	 static uint16_t ADC_Samples[ADC_CHANNELS][ADC_SAMPLES] = {0};
-	 uint16_t ADC_snapshot[ADC_CHANNELS] = {0};
- 
-	 __disable_irq(); // Disable interrupts to prevent race conditions while
-	 // create a snapshot of the ADC values (mask to keep only 12 bits)
-	 for(uint8_t channel = 0; channel < ADC_CHANNELS; channel++)
-	 {
-		 ADC_snapshot[channel] = ADC_buffer[channel] & 0x0FFFu;
-	 }
-	 __enable_irq(); // Re-enable interrupts after snapshot is taken
- 
-	 for (uint8_t channel = 0; channel < ADC_CHANNELS; channel++)
-	 {
-		 ADC_Samples[channel][sampleIndex] = ADC_snapshot[channel];
- 
-		 // Calculate the average of the samples for each channel (remove max and min for better accuracy)
-		 uint32_t sum = 0;
-		 uint16_t min = 0xFFFFu;
-		 uint16_t max = 0;
-		 
-		 for (uint8_t i = 0; i < ADC_SAMPLES; i++)
-		 {
-			 uint16_t sample = ADC_Samples[channel][i];
-			 sum += sample;
-			 if (sample < min) min = sample;
-			 if (sample > max) max = sample;
-		 }
- 
-		 sum -= (min + max);
-		 float average = (float) sum / (ADC_SAMPLES - 2); 
- 
-		 ADC_Voltage[channel] = average * (ADC_vRef/ ADC_resolution);
-	 }
- 
-	 sampleIndex++;
-	 if (sampleIndex >= ADC_SAMPLES)
-	 {
-		 sampleIndex = 0;
-	 }
- 
-	 // usage not allowed without ADC_SAMPLES samples
-	 if(samplesCollected < ADC_SAMPLES)
-	 {
-		 samplesCollected++;
-		 return 0; // voltages cannot be updated yet, try again later
-	 }
-	 
-	 return 1; // voltages can be updated now
- }
+static float updatePPVoltage(void)
+{
+	const float VREF = 3.28f;
 
+	// --- 5-Sample Trimmed Mean ADC Reading ---
+		uint32_t adc_samples[5];
+		uint32_t sum = 0;
+		uint32_t min_val = 0xFFFFFFFF; // Max possible uint32 value
+		uint32_t max_val = 0;
+
+		for (int i = 0; i < 5; i++) {
+			// Wait for the conversion to finish (10ms timeout)
+			if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
+			{
+				adc_samples[i] = HAL_ADC_GetValue(&hadc1);
+			}
+			else
+			{
+				adc_samples[i] = raw_adc_value; // Fallback to last known good value if timeout occurs
+			}
+
+			// Add to total sum
+			sum += adc_samples[i];
+
+			// Find highest and lowest values
+			if (adc_samples[i] < min_val) min_val = adc_samples[i];
+			if (adc_samples[i] > max_val) max_val = adc_samples[i];
+		}
+
+		// Eliminate the lowest and highest values, average the remaining 3
+		raw_adc_value = (sum - min_val - max_val) / 3;
+
+		// Calculate the final stabilized voltage
+		return ((float)raw_adc_value * VREF) / 4095.0f;
+		// -----------------------------------------
+}
 /*
  * CAN
  */
