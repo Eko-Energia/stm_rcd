@@ -9,6 +9,9 @@
 /*
  * Private defines
  */
+#define PP_ADC_SAMPLE_COUNT 5
+#define PP_ADC_VREF         3.28f
+
 extern CAN_HandleTypeDef hcan;
 extern TIM_HandleTypeDef htim1;
 extern ADC_HandleTypeDef hadc1;
@@ -19,7 +22,13 @@ extern ADC_HandleTypeDef hadc1;
 static float maxChargerCurrent = 0;
 static Type2_StateTypeDef Type2_state = Type2_DISCONNECTED;
 static float PP_voltage = PP_MAX_VOLTAGE;
-uint32_t raw_adc_value = 0;
+
+typedef struct {
+	uint32_t samples[PP_ADC_SAMPLE_COUNT];
+	uint8_t index;
+} PpAdcState_t;
+
+static PpAdcState_t pp_adc = {0};
 
 /*
  * CAN
@@ -241,43 +250,40 @@ static void updateTransoptorVoltage()
 }
 
 /*
- * @brief Updates PP_voltage
+ * @brief Non-blocking PP voltage update.
+ *        Takes at most one ADC sample per call (timeout 0); returns the last
+ *        computed voltage until a full trimmed-mean batch is ready.
  */
 static float updatePPVoltage(void)
 {
-	const float VREF = 3.28f;
+	if (pp_adc.index < PP_ADC_SAMPLE_COUNT)
+	{
+		if (HAL_ADC_PollForConversion(&hadc1, 0) == HAL_OK)
+		{
+			pp_adc.samples[pp_adc.index++] = HAL_ADC_GetValue(&hadc1);
+		}
+	}
 
-	// --- 5-Sample Trimmed Mean ADC Reading ---
-		uint32_t adc_samples[5];
+	if (pp_adc.index >= PP_ADC_SAMPLE_COUNT)
+	{
 		uint32_t sum = 0;
-		uint32_t min_val = 0xFFFFFFFF; // Max possible uint32 value
+		uint32_t min_val = 0xFFFFFFFF;
 		uint32_t max_val = 0;
 
-		for (int i = 0; i < 5; i++) {
-			// Wait for the conversion to finish (10ms timeout)
-			if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
-			{
-				adc_samples[i] = HAL_ADC_GetValue(&hadc1);
-			}
-			else
-			{
-				adc_samples[i] = raw_adc_value; // Fallback to last known good value if timeout occurs
-			}
-
-			// Add to total sum
-			sum += adc_samples[i];
-
-			// Find highest and lowest values
-			if (adc_samples[i] < min_val) min_val = adc_samples[i];
-			if (adc_samples[i] > max_val) max_val = adc_samples[i];
+		for (uint8_t i = 0; i < PP_ADC_SAMPLE_COUNT; i++)
+		{
+			uint32_t sample = pp_adc.samples[i];
+			sum += sample;
+			if (sample < min_val) min_val = sample;
+			if (sample > max_val) max_val = sample;
 		}
 
-		// Eliminate the lowest and highest values, average the remaining 3
-		raw_adc_value = (sum - min_val - max_val) / 3;
+		uint32_t raw_adc_value = (sum - min_val - max_val) / (PP_ADC_SAMPLE_COUNT - 2);
+		PP_voltage = ((float)raw_adc_value * PP_ADC_VREF) / 4095.0f;
+		pp_adc.index = 0;
+	}
 
-		// Calculate the final stabilized voltage
-		return ((float)raw_adc_value * VREF) / 4095.0f;
-		// -----------------------------------------
+	return PP_voltage;
 }
 /*
  * CAN
