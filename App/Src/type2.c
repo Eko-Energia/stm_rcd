@@ -67,7 +67,7 @@ float Type2_MaxChargerCurrent(float PP_voltage, float CP_duty, float BMS_temp)
 	// TODO remove batterytemp bypass
 	//float maxCurveCurrent = MaxCurveCurrent(BMS_temp);
 	// battery temp bypass
-	float maxCurveCurrent = MAX_CHARGER_CURRENT;
+	float maxCurveCurrent = MAX_CHARGER_CURRENT * 3;
 
 	// determine if battery state allows for higher current
 	maxChargerCurrent = maxCurveCurrent > maxChargerCurrent ?
