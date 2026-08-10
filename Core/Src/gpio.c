@@ -65,18 +65,25 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : RCD_FAULT_Pin START_CHARGING_Pin */
-  GPIO_InitStruct.Pin = RCD_FAULT_Pin|START_CHARGING_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  /*Configure GPIO pin : RCD_FAULT_Pin */
+  GPIO_InitStruct.Pin = RCD_FAULT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(RCD_FAULT_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : RCD_ERROR_Pin RCD_TEST_Pin */
   GPIO_InitStruct.Pin = RCD_ERROR_Pin|RCD_TEST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : START_CHARGING_Pin */
+  GPIO_InitStruct.Pin = START_CHARGING_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(START_CHARGING_GPIO_Port, &GPIO_InitStruct);
 
 }
 

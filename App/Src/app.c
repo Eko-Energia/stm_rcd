@@ -111,13 +111,12 @@ void app_main() {
 	CAN_Init(&hcan);
 	HAL_ADC_Start(&hadc1);
 	PWM_IC_Init(&PWM_sig, &htim1, 1000, 1);
+	HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_RESET);
 
 	struct LED GREEN_LED = { LED_OFF, LED_GREEN_GPIO_Port, LED_GREEN_Pin, 0 };
 	struct LED RED_LED = { LED_OFF, LED_RED_GPIO_Port, LED_RED_Pin, 0 };
-	struct LED Type2_GREEN_LED = { LED_OFF, TYPE2_LED_GREEN_GPIO_Port,
-			TYPE2_LED_GREEN_Pin, 0 };
-	struct LED Type2_RED_LED = { LED_OFF, TYPE2_LED_RED_GPIO_Port,
-			TYPE2_LED_RED_Pin, 0 };
+	struct LED Type2_GREEN_LED = { LED_OFF, TYPE2_LED_GREEN_GPIO_Port, TYPE2_LED_GREEN_Pin, 0};
+	struct LED Type2_RED_LED = { LED_OFF, TYPE2_LED_RED_GPIO_Port, TYPE2_LED_RED_Pin, 0};
 
 	LED_ChangeState(&GREEN_LED, LED_BLINK);
 
@@ -220,7 +219,8 @@ static void stopCharging() {
 /*
  * @brief Detects voltage on phases
  */
-static void updateTransoptorVoltage() {
+static void updateTransoptorVoltage()
+{
 	if (HAL_GPIO_ReadPin(L1_SENSOR_GPIO_Port, L1_SENSOR_Pin) == GPIO_PIN_SET) {
 		phaseStatus |= PHASE1_SET;
 	} else {

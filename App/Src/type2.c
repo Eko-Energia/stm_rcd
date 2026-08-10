@@ -64,7 +64,10 @@ float Type2_MaxChargerCurrent(float PP_voltage, float CP_duty, float BMS_temp)
 	// calculate maxCurrent @ 87V
 	// hardcoded sqrt(3) bo na chuj ma się ciągle liczyć
 	float maxChargerCurrent = (float) MAX_TYPE2_VOLTAGE * maxCurrent * (float) SQRT_3 / (float) MAX_CHARGER_VOLTAGE;
-	float maxCurveCurrent = MaxCurveCurrent(BMS_temp);
+	// TODO remove batterytemp bypass
+	//float maxCurveCurrent = MaxCurveCurrent(BMS_temp);
+	// battery temp bypass
+	float maxCurveCurrent = MAX_CHARGER_CURRENT * 3;
 
 	// determine if battery state allows for higher current
 	maxChargerCurrent = maxCurveCurrent > maxChargerCurrent ?
