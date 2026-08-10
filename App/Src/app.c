@@ -223,6 +223,25 @@ static void stopCharging() {
 	CAN_RemoveScheduledMsg(CANID_RCD_STATIC_CHARGER1COMMS, &CAN_buffer);
 	CAN_RemoveScheduledMsg(CANID_RCD_STATIC_CHARGER2COMMS, &CAN_buffer);
 	CAN_RemoveScheduledMsg(CANID_RCD_STATIC_CHARGER3COMMS, &CAN_buffer);
+	
+	struct CAN_scheduledMsg comms;
+	uint8_t data[5] = {0};
+
+	chargerGetData(data, comms.context);
+	comms.header.DLC = 5;
+	comms.header.IDE = CAN_ID_EXT;
+	comms.header.RTR = CAN_RTR_DATA;
+
+	data[4] = 1; // stop charging
+
+	comms.header.ExtId = CANID_RCD_STATIC_CHARGER1COMMS;
+	HAL_CAN_AddTxMessage(&hcan, &comms.header, data, &CAN_buffer.txMailbox);
+
+	comms.header.ExtId = CANID_RCD_STATIC_CHARGER2COMMS;
+	HAL_CAN_AddTxMessage(&hcan, &comms.header, data, &CAN_buffer.txMailbox);
+
+	comms.header.ExtId = CANID_RCD_STATIC_CHARGER3COMMS;
+	HAL_CAN_AddTxMessage(&hcan, &comms.header, data, &CAN_buffer.txMailbox);
 }
 
 /*
@@ -305,7 +324,7 @@ static void chargerGetData(uint8_t *data, void *context) {
 	data[2] = GET_BYTE(maxChargerCurrentInt, 0);
 	data[3] = GET_BYTE(maxChargerCurrentInt, 1);
 
-	// charging is requested whenever this function is called;
+	// charging is requested whenever this function is called
 	uint8_t control = 0;
 	data[4] = SWAP_ENDIANNESS(control);
 }
