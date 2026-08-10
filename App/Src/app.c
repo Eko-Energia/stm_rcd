@@ -8,6 +8,8 @@
 /*
  * Private defines
  */
+#define PP_ADC_SAMPLE_COUNT 5
+
 extern CAN_HandleTypeDef hcan;
 extern TIM_HandleTypeDef htim1;
 extern ADC_HandleTypeDef hadc1;
@@ -17,6 +19,7 @@ extern ADC_HandleTypeDef hadc1;
  */
 static float maxChargerCurrent = 0;
 static Type2_StateTypeDef Type2_state = Type2_DISCONNECTED;
+static float PP_voltage = MAX_PP_VOLTAGE;
 
 /*
  * CAN
@@ -28,6 +31,13 @@ static struct CAN_scheduledMsgList CAN_buffer;
 */
 static ADC_BufferTypeDef ADC_buffer;
 static ADC_ChannelsTypeDef ADC_channels;
+
+typedef struct {
+	uint32_t samples[PP_ADC_SAMPLE_COUNT];
+	uint8_t index;
+} PpAdcState_t;
+
+static PpAdcState_t pp_adc = {0};
 
 /*
 * PWM
@@ -62,6 +72,7 @@ uint32_t LED_GREEN_lastTick = 0;
  * Private function prototypes
  */
 static void updateTransoptorVoltage();
+static float updatePPVoltage(void);
 static void startCharging();
 static void stopCharging();
 static void chargerGetData(uint8_t *data, void *context);
@@ -76,11 +87,11 @@ void app_main()
 	// TODO off for testing purposes RCD_FAULT is set to input (no clicking)
 	//HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_RESET);
 
-	float PP_voltage = 0;
-
 	while(1)
 	{	
 		updateTransoptorVoltage();
+		PP_voltage = updatePPVoltage();
+
 		//TODO add safety checks for each state
 		// Type2_state informs what should be happening
 		switch(Type2_state)
@@ -88,7 +99,6 @@ void app_main()
 		case Type2_DISCONNECTED:
 
 			//TODO olac jezeli jedzie
-			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			if(PP_voltage < PP_VOLTAGE_DISCONNECTED)
 			{
 				Type2_state = Type2_IDLE;
@@ -100,7 +110,6 @@ void app_main()
 				HAL_GPIO_TogglePin(TYPE2_LED_RED_GPIO_Port, TYPE2_LED_RED_Pin);
 				LED_RED_lastTick = HAL_GetTick();
 			}
-			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			// TODO remove testing values for CP
 			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
 
@@ -119,7 +128,6 @@ void app_main()
 				HAL_GPIO_TogglePin(TYPE2_LED_GREEN_GPIO_Port, TYPE2_LED_GREEN_Pin);
 				LED_GREEN_lastTick = HAL_GetTick();
 			}
-			ADC_GetValue(&hadc1, &ADC_channels, &ADC_buffer, MAX_PP_VOLTAGE, PP_ADC_CHANNEL, &PP_voltage);
 			maxChargerCurrent = Type2_MaxChargerCurrent(PP_voltage, PWM_sig.PWM_width);
 			//TODO stop charging
 			if(maxChargerCurrent <= 0)
@@ -169,6 +177,49 @@ static void stopCharging()
 	CAN_removeScheduledMessage(CANID_RCD_STATIC_CHARGER3COMMS, &CAN_buffer);
 
 	Type2_state = Type2_IDLE;
+}
+
+/*
+ * @brief Non-blocking PP voltage update using polled ADC reads.
+ *        Collects one sample per call; returns last computed voltage until
+ *        a full trimmed-mean batch of PP_ADC_SAMPLE_COUNT samples is ready.
+ */
+static float updatePPVoltage(void)
+{
+	if (pp_adc.index < PP_ADC_SAMPLE_COUNT)
+	{
+		if (HAL_ADC_PollForConversion(&hadc1, 0) == HAL_OK)
+		{
+			pp_adc.samples[pp_adc.index++] = HAL_ADC_GetValue(&hadc1);
+		}
+	}
+
+	if (pp_adc.index >= PP_ADC_SAMPLE_COUNT)
+	{
+		uint32_t sum = 0;
+		uint32_t min_val = UINT32_MAX;
+		uint32_t max_val = 0;
+
+		for (uint8_t i = 0; i < PP_ADC_SAMPLE_COUNT; i++)
+		{
+			uint32_t sample = pp_adc.samples[i];
+			sum += sample;
+			if (sample < min_val)
+			{
+				min_val = sample;
+			}
+			if (sample > max_val)
+			{
+				max_val = sample;
+			}
+		}
+
+		uint32_t trimmed = (sum - min_val - max_val) / (PP_ADC_SAMPLE_COUNT - 2);
+		PP_voltage = MAX_PP_VOLTAGE * ((float)trimmed / 4095.0f);
+		pp_adc.index = 0;
+	}
+
+	return PP_voltage;
 }
 
 /*
