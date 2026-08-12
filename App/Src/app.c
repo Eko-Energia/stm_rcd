@@ -199,7 +199,7 @@ void app_main() {
  */
 static void addNodeMsg(void)
 {
-	struct CAN_scheduledMsg nodeMsg;
+	struct CAN_scheduledMsg nodeMsg = {0};
 	nodeMsg.header.StdId = CANID_RCD_STATIC_NODE;
 	nodeMsg.header.DLC = 8;
 	nodeMsg.header.IDE = CAN_ID_STD;
