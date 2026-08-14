@@ -205,7 +205,7 @@ static void addNodeMsg(void)
 	nodeMsg.header.IDE = CAN_ID_STD;
 	nodeMsg.header.RTR = CAN_RTR_DATA;
 	nodeMsg.lastTick = 0;
-	nodeMsg.periodMs = 1000;
+	nodeMsg.periodMs = 5000;
 	nodeMsg.getData = nodeGetData;
 	nodeMsg.context = NULL;
 
