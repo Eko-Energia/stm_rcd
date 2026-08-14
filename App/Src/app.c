@@ -111,13 +111,16 @@ static phaseStatus_e phaseStatus = PHASE_UNPOWERED;
 static void updateTransoptorVoltage();
 static void startCharging();
 static void stopCharging();
+static void addNodeMsg(void);
 static void chargerGetData(uint8_t *data, void *context);
+static void nodeGetData(uint8_t *data, void *context);
 static void unpackChargerOutput(const uint8_t *data, ChargerOutput_t *out);
 static void handleRxCanMessages(void);
 static float updatePPVoltage(void);
 
 void app_main() {
 	CAN_Init(&hcan);
+	addNodeMsg();
 	HAL_ADC_Start(&hadc1);
 	PWM_IC_Init(&PWM_sig, &htim1, 1000, 1);
 	HAL_GPIO_WritePin(RCD_FAULT_GPIO_Port, RCD_FAULT_Pin, GPIO_PIN_RESET);
@@ -194,6 +197,21 @@ void app_main() {
 /*
  * Private function definitions
  */
+static void addNodeMsg(void)
+{
+	struct CAN_scheduledMsg nodeMsg = {0};
+	nodeMsg.header.StdId = CANID_RCD_STATIC_NODE;
+	nodeMsg.header.DLC = 8;
+	nodeMsg.header.IDE = CAN_ID_STD;
+	nodeMsg.header.RTR = CAN_RTR_DATA;
+	nodeMsg.lastTick = 0;
+	nodeMsg.periodMs = 5000;
+	nodeMsg.getData = nodeGetData;
+	nodeMsg.context = NULL;
+
+	CAN_AddScheduledMsg(&nodeMsg, &CAN_buffer);
+}
+
 static void startCharging() {
 	HAL_GPIO_WritePin(START_CHARGING_GPIO_Port, START_CHARGING_Pin,
 			GPIO_PIN_SET);
@@ -327,6 +345,35 @@ static void chargerGetData(uint8_t *data, void *context) {
 	// charging is requested whenever this function is called
 	uint8_t control = 0;
 	data[4] = SWAP_ENDIANNESS(control);
+}
+
+/*
+ * RCD_STATIC_NODE (BO_ 192):
+ *  Error_Code              0|16
+ *  Reserved               16|4
+ *  Severity               20|3
+ *  Node_Execution_Halted  23|1
+ *  Error_Sprecific_Data   24|40
+ */
+static void nodeGetData(uint8_t *data, void *context) {
+	(void)context;
+
+	uint16_t errorCode = 0;
+	uint8_t reserved = 0;
+	uint8_t severity = 0;
+	uint8_t nodeExecutionHalted = 0;
+	uint64_t errorSpecificData = 0;
+
+	data[0] = GET_BYTE(errorCode, 0);
+	data[1] = GET_BYTE(errorCode, 1);
+	data[2] = (uint8_t)((reserved & 0x0Fu)
+			| ((severity & 0x07u) << 4)
+			| ((nodeExecutionHalted & 0x01u) << 7));
+	data[3] = GET_BYTE(errorSpecificData, 0);
+	data[4] = GET_BYTE(errorSpecificData, 1);
+	data[5] = GET_BYTE(errorSpecificData, 2);
+	data[6] = GET_BYTE(errorSpecificData, 3);
+	data[7] = GET_BYTE(errorSpecificData, 4);
 }
 
 static void unpackChargerOutput(const uint8_t *data, ChargerOutput_t *out)
