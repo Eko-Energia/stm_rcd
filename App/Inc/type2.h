@@ -22,7 +22,7 @@
  * max max max = 37A (just for reference)
  */
 #define MAX_CHARGER_CURRENT (37)
-#define MAX_CHARGER_VOLTAGE (87)
+#define MAX_CHARGER_VOLTAGE (88.2)
 #define MAX_TYPE2_CURRENT (16)
 #define MAX_TYPE2_VOLTAGE (400)
 #define PP_MAX_VOLTAGE (3.3f)
